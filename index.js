@@ -1227,8 +1227,7 @@ if (interaction.isButton()) {
 
     return;
   }
-  } catch (erro) {
-
+   } catch (erro) {
     console.error(
       "ERRO NA INTERAÇÃO:",
       erro
