@@ -8,9 +8,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle
+  UserSelectMenuBuilder
 } = require("discord.js");
 
 const fs = require("fs");
@@ -25,6 +23,9 @@ const client = new Client({
 
 const ADV_FILE = "./advs.json";
 const CHAVES_FILE = "./chaves.json";
+
+// Guarda resultados que ainda estão sendo preenchidos
+const resultadosPendentes = new Map();
 
 // =========================
 // ARQUIVOS
@@ -271,6 +272,10 @@ async function aplicarCargo(
 // =========================
 
 const comandos = [
+  // =========================
+  // ADV
+  // =========================
+
   new SlashCommandBuilder()
     .setName("adv")
     .setDescription(
@@ -343,6 +348,10 @@ const comandos = [
       PermissionFlagsBits.ManageMessages
     ),
 
+  // =========================
+  // CHAVES
+  // =========================
+
   new SlashCommandBuilder()
     .setName("chavesbdr")
     .setDescription(
@@ -366,6 +375,79 @@ const comandos = [
           }
         )
     )
+
+    .addUserOption(option =>
+      option
+        .setName("mc1")
+        .setDescription(
+          "Primeiro MC"
+        )
+        .setRequired(true)
+    )
+
+    .addUserOption(option =>
+      option
+        .setName("mc2")
+        .setDescription(
+          "Segundo MC"
+        )
+        .setRequired(true)
+    )
+
+    .addUserOption(option =>
+      option
+        .setName("mc3")
+        .setDescription(
+          "Terceiro MC"
+        )
+        .setRequired(true)
+    )
+
+    .addUserOption(option =>
+      option
+        .setName("mc4")
+        .setDescription(
+          "Quarto MC"
+        )
+        .setRequired(true)
+    )
+
+    .addUserOption(option =>
+      option
+        .setName("mc5")
+        .setDescription(
+          "Quinto MC"
+        )
+        .setRequired(false)
+    )
+
+    .addUserOption(option =>
+      option
+        .setName("mc6")
+        .setDescription(
+          "Sexto MC"
+        )
+        .setRequired(false)
+    )
+
+    .addUserOption(option =>
+      option
+        .setName("mc7")
+        .setDescription(
+          "Sétimo MC"
+        )
+        .setRequired(false)
+    )
+
+    .addUserOption(option =>
+      option
+        .setName("mc8")
+        .setDescription(
+          "Oitavo MC"
+        )
+        .setRequired(false)
+    )
+
     .setDefaultMemberPermissions(
       PermissionFlagsBits.ManageMessages
     ),
@@ -441,23 +523,8 @@ async function registrarComandos() {
 }
 
 // =========================
-// UTILIDADES DE MENÇÕES
+// CONFRONTOS
 // =========================
-
-function extrairIds(texto) {
-  const encontrados =
-    texto.match(
-      /<@!?(\d+)>/g
-    ) || [];
-
-  return encontrados.map(
-    mencao =>
-      mencao.replace(
-        /[<@!>]/g,
-        ""
-      )
-  );
-}
 
 function criarConfrontos(ids) {
   const embaralhados = [
@@ -494,7 +561,8 @@ function criarConfrontos(ids) {
   ) {
     confrontos.push({
       mc1: embaralhados[i],
-      mc2: embaralhados[i + 1]
+      mc2:
+        embaralhados[i + 1]
     });
   }
 
@@ -565,6 +633,100 @@ function recalcularRanking(
   dados.ranking = ranking;
 
   salvarChaves(dados);
+}
+
+// =========================
+// MENU DE RESULTADO
+// =========================
+
+function criarMenuResultado(
+  numero,
+  campo,
+  placeholder,
+  selecionado
+) {
+  const menu =
+    new UserSelectMenuBuilder()
+      .setCustomId(
+        `resultado_select_${numero}_${campo}`
+      )
+      .setPlaceholder(
+        placeholder
+      )
+      .setMinValues(1)
+      .setMaxValues(1);
+
+  if (selecionado) {
+    menu.setDefaultUsers(
+      selecionado
+    );
+  }
+
+  return new ActionRowBuilder()
+    .addComponents(menu);
+}
+
+function criarComponentesResultado(
+  numero,
+  resultado
+) {
+  const componentes = [
+    criarMenuResultado(
+      numero,
+      "campeao",
+      "🥇 Selecionar campeão",
+      resultado.campeao
+    ),
+
+    criarMenuResultado(
+      numero,
+      "vice",
+      "🥈 Selecionar vice-campeão",
+      resultado.vice
+    ),
+
+    criarMenuResultado(
+      numero,
+      "passou1",
+      "✅ Selecionar MC que passou",
+      resultado.passou1
+    ),
+
+    criarMenuResultado(
+      numero,
+      "passou2",
+      "✅ Selecionar outro MC que passou",
+      resultado.passou2
+    )
+  ];
+
+  const todosPreenchidos =
+    resultado.campeao &&
+    resultado.vice &&
+    resultado.passou1 &&
+    resultado.passou2;
+
+  const botao =
+    new ButtonBuilder()
+      .setCustomId(
+        `confirmar_resultado_${numero}`
+      )
+      .setLabel(
+        "Confirmar resultado"
+      )
+      .setStyle(
+        ButtonStyle.Success
+      )
+      .setDisabled(
+        !todosPreenchidos
+      );
+
+  componentes.push(
+    new ActionRowBuilder()
+      .addComponents(botao)
+  );
+
+  return componentes;
 }
 
 // =========================
@@ -693,7 +855,6 @@ client.on(
             `📌 ADV: **${numero}**\n` +
             `📝 Motivo: **${motivo}**`;
 
-          // ADV 2
           if (numero === 2) {
             await membro
               .timeout(
@@ -715,7 +876,6 @@ client.on(
             );
           }
 
-          // ADV 3
           if (numero === 3) {
             await membro
               .timeout(
@@ -743,7 +903,6 @@ client.on(
             );
           }
 
-          // ADV 4
           if (numero === 4) {
             resposta +=
               `\n\n🚪 **Punição:** Membro expulso do servidor.`;
@@ -755,7 +914,6 @@ client.on(
               .catch(() => {});
           }
 
-          // Acima de 4
           if (numero > 4) {
             resposta +=
               `\n\n⚠️ O membro já ultrapassou o limite de 4 ADVs.`;
@@ -929,7 +1087,7 @@ client.on(
           }
 
           let texto =
-            "⚠️ **ADVERTÊNCIAS RECENTES**\n\n";
+           "⚠️ **ADVERTÊNCIAS RECENTES**\n\n";
 
           for (
             const adv of recentes
@@ -960,282 +1118,32 @@ client.on(
               "tamanho"
             );
 
-          const modal =
-            new ModalBuilder()
-              .setCustomId(
-                `criar_chave_${tamanho}`
-              )
-              .setTitle(
-                `Criar Chave BDR — ${tamanho} MCs`
+          const ids = [];
+
+          for (
+            let i = 1;
+            i <= 8;
+            i++
+          ) {
+            const usuario =
+              interaction.options.getUser(
+                `mc${i}`
               );
 
-          const campo =
-            new TextInputBuilder()
-              .setCustomId("mcs")
-              .setLabel(
-                `Mande os ${tamanho} MCs`
-              )
-              .setPlaceholder(
-                "Ex: @MC1 @MC2 @MC3 @MC4"
-              )
-              .setStyle(
-                TextInputStyle.Paragraph
-              )
-              .setRequired(true);
-
-          modal.addComponents(
-            new ActionRowBuilder().addComponents(
-              campo
-            )
-          );
-
-          await interaction.showModal(
-            modal
-          );
-
-          return;
-        }
-
-        // =========================
-        // /RANKINGCHAVES
-        // =========================
-
-        if (
-          interaction.commandName ===
-          "rankingchaves"
-        ) {
-          const dados =
-            garantirMesAtual();
-
-          const ranking =
-            Object.entries(
-              dados.ranking
-            ).sort(
-              (a, b) =>
-                b[1] - a[1]
-            );
-
-          if (
-            ranking.length === 0
-          ) {
-            return interaction.reply({
-              content:
-                `🏆 **RANKING BDR — ${nomeMes(dados.mesAtual)}**\n\n` +
-                `Ainda não existem pontos neste mês.`
-            });
-          }
-
-          let texto =
-            `🏆 **RANKING BDR — ${nomeMes(dados.mesAtual)}**\n\n`;
-
-          ranking.forEach(
-            ([id, pontos], index) => {
-              texto +=
-                `**${index + 1}.** <@${id}> — **${pontos} pts**\n`;
+            if (usuario) {
+              ids.push(
+                usuario.id
+              );
             }
-          );
-
-          await interaction.reply({
-            content: texto
-          });
-
-          return;
-        }
-
-        // =========================
-        // /EDITRANKINGCHAVES
-        // =========================
-
-        if (
-          interaction.commandName ===
-          "editrankingchaves"
-        ) {
-          const numero =
-            interaction.options.getInteger(
-              "chave"
-            );
-
-          const dados =
-            garantirMesAtual();
-
-          const chave =
-            dados.chaves.find(
-              c =>
-                c.numero ===
-                  numero &&
-                c.mes ===
-                  dados.mesAtual
-            );
-
-          if (!chave) {
-            return interaction.reply({
-              content:
-                "❌ Chave não encontrada neste mês.",
-              ephemeral: true
-            });
           }
-
-          if (!chave.resultado) {
-            return interaction.reply({
-              content:
-                "❌ Essa chave ainda não possui resultado.",
-              ephemeral: true
-            });
-          }
-
-          const modal =
-            new ModalBuilder()
-              .setCustomId(
-                `editar_chave_${numero}`
-              )
-              .setTitle(
-                `Editar Chave ${numero}`
-              );
-
-          const criarCampo = (
-            id,
-            label,
-            valor
-          ) => {
-            return new TextInputBuilder()
-              .setCustomId(id)
-              .setLabel(label)
-              .setValue(
-                `<@${valor}>`
-              )
-              .setStyle(
-                TextInputStyle.Short
-              )
-              .setRequired(true);
-          };
-
-          modal.addComponents(
-            new ActionRowBuilder().addComponents(
-              criarCampo(
-                "campeao",
-                "Campeão",
-                chave.resultado.campeao
-              )
-            ),
-            new ActionRowBuilder().addComponents(
-              criarCampo(
-                "vice",
-                "Vice",
-                chave.resultado.vice
-              )
-            ),
-            new ActionRowBuilder().addComponents(
-              criarCampo(
-                "passou1",
-                "Passou 1",
-                chave.resultado.passou1
-              )
-            ),
-            new ActionRowBuilder().addComponents(
-              criarCampo(
-                "passou2",
-                "Passou 2",
-                chave.resultado.passou2
-              )
-            )
-          );
-
-          await interaction.showModal(
-            modal
-          );
-
-          return;
-        }
-
-        // =========================
-        // /LIMPARRANKING
-        // =========================
-
-        if (
-          interaction.commandName ===
-          "limparranking"
-        ) {
-          const row =
-            new ActionRowBuilder()
-              .addComponents(
-                new ButtonBuilder()
-                  .setCustomId(
-                    "confirmar_limpar_ranking"
-                  )
-                  .setLabel(
-                    "Confirmar"
-                  )
-                  .setStyle(
-                    ButtonStyle.Danger
-                  ),
-
-                new ButtonBuilder()
-                  .setCustomId(
-                    "cancelar_limpar_ranking"
-                  )
-                  .setLabel(
-                    "Cancelar"
-                  )
-                  .setStyle(
-                    ButtonStyle.Secondary
-                  )
-              );
-
-          await interaction.reply({
-            content:
-              "⚠️ **Tem certeza que deseja encerrar o ranking atual?**\n\n" +
-              "O ranking será arquivado e um novo ranking será iniciado.",
-
-            components: [row],
-
-            ephemeral: true
-          });
-
-          return;
-        }
-      }
-
-      // =====================================
-      // MODAIS
-      // =====================================
-
-      if (
-        interaction.isModalSubmit()
-      ) {
-
-        // =========================
-        // CRIAR CHAVE
-        // =========================
-
-        if (
-          interaction.customId.startsWith(
-            "criar_chave_"
-          )
-        ) {
-          const tamanho =
-            Number(
-              interaction.customId.replace(
-                "criar_chave_",
-                ""
-              )
-            );
-
-          const texto =
-            interaction.fields.getTextInputValue(
-              "mcs"
-            );
-
-          const ids =
-            extrairIds(texto);
 
           if (
-            ids.length !==
-            tamanho
+            ids.length !== tamanho
           ) {
             return interaction.reply({
               content:
-                `❌ Você precisa marcar exatamente **${tamanho} MCs**.\n` +
-                `Você marcou **${ids.length}**.`,
+                `❌ Para uma chave de **${tamanho} MCs**, você precisa selecionar exatamente **${tamanho} MCs**.\n\n` +
+                `Você selecionou **${ids.length}**.`,
 
               ephemeral: true
             });
@@ -1247,7 +1155,7 @@ client.on(
           ) {
             return interaction.reply({
               content:
-                "❌ Um mesmo MC não pode ocupar duas posições.",
+                "❌ Você não pode selecionar o mesmo MC duas vezes.",
 
               ephemeral: true
             });
@@ -1341,200 +1249,62 @@ client.on(
         }
 
         // =========================
-        // RESULTADO DA CHAVE
+        // /RANKINGCHAVES
         // =========================
 
         if (
-          interaction.customId.startsWith(
-            "resultado_chave_"
-          )
+          interaction.commandName ===
+          "rankingchaves"
         ) {
-          const numero =
-            Number(
-              interaction.customId.replace(
-                "resultado_chave_",
-                ""
-              )
-            );
-
           const dados =
             garantirMesAtual();
 
-          const chave =
-            dados.chaves.find(
-              c =>
-                c.numero ===
-                  numero &&
-                c.mes ===
-                  dados.mesAtual
-            );
-
-          if (!chave) {
-            return interaction.reply({
-              content:
-                "❌ Chave não encontrada.",
-              ephemeral: true
-            });
-          }
-
-          if (chave.fechada) {
-            return interaction.reply({
-              content:
-                "❌ Essa chave já foi encerrada.",
-              ephemeral: true
-            });
-          }
-
-          const campeaoTexto =
-            interaction.fields.getTextInputValue(
-              "campeao"
-            );
-
-          const viceTexto =
-            interaction.fields.getTextInputValue(
-              "vice"
-            );
-
-          const passou1Texto =
-            interaction.fields.getTextInputValue(
-              "passou1"
-            );
-
-          const passou2Texto =
-            interaction.fields.getTextInputValue(
-              "passou2"
-            );
-
-          const campeaoIds =
-            extrairIds(
-              campeaoTexto
-            );
-
-          const viceIds =
-            extrairIds(
-              viceTexto
-            );
-
-          const passou1Ids =
-            extrairIds(
-              passou1Texto
-            );
-
-          const passou2Ids =
-            extrairIds(
-              passou2Texto
+          const ranking =
+            Object.entries(
+              dados.ranking
+            ).sort(
+              (a, b) =>
+                b[1] - a[1]
             );
 
           if (
-            campeaoIds.length !==
-              1 ||
-            viceIds.length !==
-              1 ||
-            passou1Ids.length !==
-              1 ||
-            passou2Ids.length !==
-              1
+            ranking.length === 0
           ) {
             return interaction.reply({
               content:
-                "❌ Cada campo precisa conter exatamente **1 MC marcado**.",
-
-              ephemeral: true
+                `🏆 **RANKING BDR — ${nomeMes(dados.mesAtual)}**\n\n` +
+                `Ainda não existem pontos neste mês.`
             });
           }
 
-          const ids = [
-            campeaoIds[0],
-            viceIds[0],
-            passou1Ids[0],
-            passou2Ids[0]
-          ];
+          let texto =
+            `🏆 **RANKING BDR — ${nomeMes(dados.mesAtual)}**\n\n`;
 
-          if (
-            new Set(ids).size !==
-            ids.length
-          ) {
-            return interaction.reply({
-              content:
-                "❌ Um mesmo MC não pode ocupar duas posições.",
-
-              ephemeral: true
-            });
-          }
-
-          for (
-            const id of ids
-          ) {
-            if (
-              !chave.participantes.includes(
-                id
-              )
-            ) {
-              return interaction.reply({
-                content:
-                  `❌ <@${id}> não participou desta chave.`,
-
-                ephemeral: true
-              });
+          ranking.forEach(
+            ([id, pontos], index) => {
+              texto +=
+                `**${index + 1}.** <@${id}> — **${pontos} pts**\n`;
             }
-          }
-
-          chave.resultado = {
-            campeao:
-              ids[0],
-
-            vice:
-              ids[1],
-
-            passou1:
-              ids[2],
-
-            passou2:
-              ids[3]
-          };
-
-          chave.fechada =
-            true;
-
-          chave.encerradaPor =
-            interaction.user.id;
-
-          chave.encerradaEm =
-            new Date().toISOString();
-
-          recalcularRanking(
-            dados,
-            dados.mesAtual
           );
 
           await interaction.reply({
-            content:
-              `✅ **Chave ${numero} encerrada com sucesso!**\n\n` +
-              `🥇 <@${ids[0]}> — **+5 pts**\n` +
-              `🥈 <@${ids[1]}> — **+3 pts**\n` +
-              `✅ <@${ids[2]}> — **+1 pt**\n` +
-              `✅ <@${ids[3]}> — **+1 pt**\n\n` +
-              `📊 **Ranking recalculado.**`
+            content: texto
           });
 
           return;
         }
 
         // =========================
-        // EDITAR RESULTADO
+        // /EDITRANKINGCHAVES
         // =========================
 
         if (
-          interaction.customId.startsWith(
-            "editar_chave_"
-          )
+          interaction.commandName ===
+          "editrankingchaves"
         ) {
           const numero =
-            Number(
-              interaction.customId.replace(
-                "editar_chave_",
-                ""
-              )
+            interaction.options.getInteger(
+              "chave"
             );
 
           const dados =
@@ -1552,107 +1322,182 @@ client.on(
           if (!chave) {
             return interaction.reply({
               content:
-                "❌ Chave não encontrada.",
+                "❌ Chave não encontrada neste mês.",
               ephemeral: true
             });
           }
 
-          const campos = [
-            "campeao",
-            "vice",
-            "passou1",
-            "passou2"
-          ];
-
-          const ids = [];
-
-          for (
-            const campo of campos
-          ) {
-            const valor =
-              interaction.fields.getTextInputValue(
-                campo
-              );
-
-            const encontrados =
-              extrairIds(valor);
-
-            if (
-              encontrados.length !==
-              1
-            ) {
-              return interaction.reply({
-                content:
-                  `❌ O campo **${campo}** precisa conter exatamente 1 MC marcado.`,
-
-                ephemeral: true
-              });
-            }
-
-            ids.push(
-              encontrados[0]
-            );
-          }
-
-          if (
-            new Set(ids).size !==
-            ids.length
-          ) {
+          if (!chave.resultado) {
             return interaction.reply({
               content:
-                "❌ Um mesmo MC não pode ocupar duas posições.",
-
+                "❌ Essa chave ainda não possui resultado.",
               ephemeral: true
             });
           }
 
-          for (
-            const id of ids
-          ) {
-            if (
-              !chave.participantes.includes(
-                id
-              )
-            ) {
-              return interaction.reply({
-                content:
-                  `❌ <@${id}> não participou desta chave.`,
-
-                ephemeral: true
-              });
-            }
-          }
-
-          chave.resultado = {
+          const resultado = {
             campeao:
-              ids[0],
+              chave.resultado.campeao,
 
             vice:
-              ids[1],
+              chave.resultado.vice,
 
             passou1:
-              ids[2],
+              chave.resultado.passou1,
 
             passou2:
-              ids[3]
+              chave.resultado.passou2
           };
 
-          chave.fechada =
-            true;
-
-          recalcularRanking(
-            dados,
-            dados.mesAtual
+          resultadosPendentes.set(
+            `${interaction.user.id}_${numero}`,
+            resultado
           );
 
           await interaction.reply({
             content:
-              `✅ **Chave ${numero} editada com sucesso!**\n\n` +
-              `🥇 <@${ids[0]}> — +5\n` +
-              `🥈 <@${ids[1]}> — +3\n` +
-              `✅ <@${ids[2]}> — +1\n` +
-              `✅ <@${ids[3]}> — +1\n\n` +
-              `📊 Ranking recalculado.`
+              `✏️ **EDITAR RESULTADO — CHAVE ${numero}**\n\n` +
+              `Selecione novamente os resultados abaixo.`,
+
+            components:
+              criarComponentesResultado(
+                numero,
+                resultado
+              ),
+
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        // =========================
+        // /LIMPARRANKING
+        // =========================
+
+        if (
+          interaction.commandName ===
+          "limparranking"
+        ) {
+          const row =
+            new ActionRowBuilder()
+              .addComponents(
+                new ButtonBuilder()
+                  .setCustomId(
+                    "confirmar_limpar_ranking"
+                  )
+                  .setLabel(
+                    "Confirmar"
+                  )
+                  .setStyle(
+                    ButtonStyle.Danger
+                  ),
+
+                new ButtonBuilder()
+                  .setCustomId(
+                    "cancelar_limpar_ranking"
+                  )
+                  .setLabel(
+                    "Cancelar"
+                  )
+                  .setStyle(
+                    ButtonStyle.Secondary
+                  )
+              );
+
+          await interaction.reply({
+            content:
+              "⚠️ **Tem certeza que deseja encerrar o ranking atual?**\n\n" +
+              "O ranking será arquivado e um novo ranking será iniciado.",
+
+            components: [row],
+
+            ephemeral: true
+          });
+
+          return;
+        }
+      }
+
+      // =====================================
+      // SELECT MENUS
+      // =====================================
+
+      if (
+        interaction.isUserSelectMenu()
+      ) {
+        const partes =
+          interaction.customId.split(
+            "_"
+          );
+
+        if (
+          partes[0] ===
+            "resultado" &&
+          partes[1] ===
+            "select"
+        ) {
+          const numero =
+            Number(partes[2]);
+
+          const campo =
+            partes[3];
+
+          const chaveDados =
+            `${interaction.user.id}_${numero}`;
+
+          let resultado =
+            resultadosPendentes.get(
+              chaveDados
+            );
+
+          if (!resultado) {
+            resultado = {
+              campeao: null,
+              vice: null,
+              passou1: null,
+              passou2: null
+            };
+          }
+
+          resultado[campo] =
+            interaction.values[0];
+
+          resultadosPendentes.set(
+            chaveDados,
+            resultado
+          );
+
+          await interaction.update({
+            content:
+              `🏆 **RESULTADO — CHAVE ${numero}**\n\n` +
+              `Selecione os 4 resultados.\n\n` +
+              `🥇 Campeão: ${
+                resultado.campeao
+                  ? `<@${resultado.campeao}>`
+                  : "⏳ não selecionado"
+              }\n` +
+              `🥈 Vice: ${
+                resultado.vice
+                  ? `<@${resultado.vice}>`
+                  : "⏳ não selecionado"
+              }\n` +
+              `✅ Passou 1: ${
+                resultado.passou1
+                  ? `<@${resultado.passou1}>`
+                  : "⏳ não selecionado"
+              }\n` +
+              `✅ Passou 2: ${
+                resultado.passou2
+                  ? `<@${resultado.passou2}>`
+                  : "⏳ não selecionado"
+              }`,
+
+            components:
+              criarComponentesResultado(
+                numero,
+                resultado
+              )
           });
 
           return;
@@ -1712,68 +1557,193 @@ client.on(
             });
           }
 
-          const modal =
-            new ModalBuilder()
-              .setCustomId(
-                `resultado_chave_${numero}`
-              )
-              .setTitle(
-                `Resultado — Chave ${numero}`
-              );
+          const chaveDados =
+            `${interaction.user.id}_${numero}`;
 
-          const criarCampo = (
-            id,
-            label,
-            placeholder
-          ) =>
-            new TextInputBuilder()
-              .setCustomId(id)
-              .setLabel(label)
-              .setPlaceholder(
-                placeholder
-              )
-              .setStyle(
-                TextInputStyle.Short
-              )
-              .setRequired(true);
+          const resultadoExistente = {
+            campeao: null,
+            vice: null,
+            passou1: null,
+            passou2: null
+          };
 
-          modal.addComponents(
-            new ActionRowBuilder().addComponents(
-              criarCampo(
-                "campeao",
-                "Campeão",
-                "@MC campeão"
-              )
-            ),
+          resultadosPendentes.set(
+            chaveDados,
+            resultadoExistente
+          );
 
-            new ActionRowBuilder().addComponents(
-              criarCampo(
-                "vice",
-                "Vice-campeão",
-                "@MC vice"
-              )
-            ),
+          await interaction.reply({
+            content:
+              `🏆 **RESULTADO — CHAVE ${numero}**\n\n` +
+              `Selecione os quatro resultados abaixo.`,
 
-            new ActionRowBuilder().addComponents(
-              criarCampo(
-                "passou1",
-                "Outro MC que passou",
-                "@MC"
-              )
-            ),
+            components:
+              criarComponentesResultado(
+                numero,
+                resultadoExistente
+              ),
 
-            new ActionRowBuilder().addComponents(
-              criarCampo(
-                "passou2",
-                "Outro MC que passou",
-                "@MC"
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        // =========================
+        // CONFIRMAR RESULTADO
+        // =========================
+
+        if (
+          interaction.customId.startsWith(
+            "confirmar_resultado_"
+          )
+        ) {
+          const numero =
+            Number(
+              interaction.customId.replace(
+                "confirmar_resultado_",
+                ""
               )
+            );
+
+          const chaveDados =
+            `${interaction.user.id}_${numero}`;
+
+          const resultado =
+            resultadosPendentes.get(
+              chaveDados
+            );
+
+          if (!resultado) {
+            return interaction.reply({
+              content:
+                "❌ Resultado não encontrado. Abra novamente a chave.",
+
+              ephemeral: true
+            });
+          }
+
+          const ids = [
+            resultado.campeao,
+            resultado.vice,
+            resultado.passou1,
+            resultado.passou2
+          ];
+
+          if (
+            ids.some(
+              id => !id
             )
+          ) {
+            return interaction.reply({
+              content:
+                "❌ Selecione todos os quatro resultados.",
+
+              ephemeral: true
+            });
+          }
+
+          if (
+            new Set(ids).size !==
+            ids.length
+          ) {
+            return interaction.reply({
+              content:
+                "❌ Um mesmo MC não pode ocupar duas posições.",
+
+              ephemeral: true
+            });
+          }
+
+          const dados =
+            garantirMesAtual();
+
+          const chave =
+            dados.chaves.find(
+              c =>
+                c.numero ===
+                  numero &&
+                c.mes ===
+                  dados.mesAtual
+            );
+
+          if (!chave) {
+            return interaction.reply({
+              content:
+                "❌ Chave não encontrada.",
+              ephemeral: true
+            });
+          }
+
+          if (chave.fechada) {
+            return interaction.reply({
+              content:
+                "❌ Essa chave já foi encerrada.",
+
+              ephemeral: true
+            });
+          }
+
+          for (
+            const id of ids
+          ) {
+            if (
+              !chave.participantes.includes(
+                id
+              )
+            ) {
+              return interaction.reply({
+                content:
+                  `❌ <@${id}> não participou desta chave.`,
+
+                ephemeral: true
+              });
+            }
+          }
+
+          chave.resultado = {
+            campeao:
+              resultado.campeao,
+
+            vice:
+              resultado.vice,
+
+            passou1:
+              resultado.passou1,
+
+            passou2:
+              resultado.passou2
+          };
+
+          chave.fechada =
+            true;
+
+          chave.encerradaPor =
+            interaction.user.id;
+
+          chave.encerradaEm =
+            new Date().toISOString();
+
+          recalcularRanking(
+            dados,
+            dados.mesAtual
           );
 
-          await interaction.showModal(
-            modal
+          resultadosPendentes.delete(
+            chaveDados
           );
+
+          await interaction.update({
+            content:
+              `✅ **CHAVE ${numero} ENCERRADA!**\n\n` +
+              `🥇 <@${ids[0]}> — **+5 pts**\n` +
+              `🥈 <@${ids[1]}> — **+3 pts**\n` +
+              `✅ <@${ids[2]}> — **+1 pt**\n` +
+              `✅ <@${ids[3]}> — **+1 pt**\n\n` +
+              `📊 **Ranking recalculado com sucesso.**`,
+
+            components: []
+          });
 
           return;
         }
