@@ -1227,8 +1227,6 @@ if (interaction.isButton()) {
 
     return;
   }
-}
-
   } catch (erro) {
 
     console.error(
