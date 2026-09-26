@@ -835,13 +835,414 @@ client.on("interactionCreate", async interaction => {
         }
 
         if (new Set(ids).size !== ids.length) {
-              }
-  } catch (erro) {
-    console.error("ERRO NA INTERAÇÃO:", erro);
+  return interaction.reply({
+    content:
+      "❌ Não pode haver MC repetido na chave.",
+    ephemeral: true
+  });
+}
 
-    if (!interaction.replied && !interaction.deferred) {
+const dados = garantirMesAtual();
+
+const numero = dados.proximaChave;
+
+dados.proximaChave++;
+
+const confrontos = criarConfrontos(ids);
+
+const chave = {
+  numero,
+  mes: dados.mesAtual,
+  tamanho,
+  participantes: ids,
+  confrontos,
+  fechada: false,
+  resultado: null,
+  criadaEm: new Date().toISOString(),
+  criadaPor: interaction.user.id
+};
+
+dados.chaves.push(chave);
+
+salvarChaves(dados);
+
+let mensagem =
+  `🏆 **CHAVE BDR ${numero}**\n\n` +
+  `👥 **${tamanho} MCs**\n\n`;
+
+confrontos.forEach((confronto, index) => {
+  mensagem +=
+    `⚔️ **Confronto ${index + 1}**\n` +
+    `<@${confronto.mc1}> 🆚 <@${confronto.mc2}>\n\n`;
+});
+
+mensagem +=
+  `📅 **${nomeMes(dados.mesAtual)}**\n` +
+  `🔒 Chave aberta — clique abaixo para encerrar.`;
+
+const botao = new ActionRowBuilder().addComponents(
+  new ButtonBuilder()
+    .setCustomId(`encerrar_chave_${numero}`)
+    .setLabel("Encerrar Chave")
+    .setStyle(ButtonStyle.Danger)
+);
+
+await interaction.reply({
+  content: mensagem,
+  components: [botao]
+});
+
+return;
+}
+
+// =========================
+// MODAIS
+// =========================
+
+if (interaction.isModalSubmit()) {
+
+  if (interaction.customId.startsWith("resultado_chave_")) {
+
+    const numero = Number(
+      interaction.customId.replace("resultado_chave_", "")
+    );
+
+    const dados = garantirMesAtual();
+
+    const chave = dados.chaves.find(
+      c =>
+        c.numero === numero &&
+        c.mes === dados.mesAtual
+    );
+
+    if (!chave) {
+      return interaction.reply({
+        content: "❌ Chave não encontrada.",
+        ephemeral: true
+      });
+    }
+
+    if (chave.fechada) {
+      return interaction.reply({
+        content: "❌ Essa chave já foi encerrada.",
+        ephemeral: true
+      });
+    }
+
+    const campos = [
+      "campeao",
+      "vice",
+      "passou1",
+      "passou2"
+    ];
+
+    const idsResultado = [];
+
+    for (const campo of campos) {
+      const texto =
+        interaction.fields.getTextInputValue(campo);
+
+      const idsCampo = extrairIds(texto);
+
+      if (idsCampo.length !== 1) {
+        return interaction.reply({
+          content:
+            "❌ Cada campo precisa ter exatamente 1 MC marcado.",
+          ephemeral: true
+        });
+      }
+
+      idsResultado.push(idsCampo[0]);
+    }
+
+    if (
+      new Set(idsResultado).size !==
+      idsResultado.length
+    ) {
+      return interaction.reply({
+        content:
+          "❌ Um mesmo MC não pode ocupar duas posições.",
+        ephemeral: true
+      });
+    }
+
+    for (const id of idsResultado) {
+      if (!chave.participantes.includes(id)) {
+        return interaction.reply({
+          content:
+            `❌ <@${id}> não participou desta chave.`,
+          ephemeral: true
+        });
+      }
+    }
+
+    chave.resultado = {
+      campeao: idsResultado[0],
+      vice: idsResultado[1],
+      passou1: idsResultado[2],
+      passou2: idsResultado[3]
+    };
+
+    chave.fechada = true;
+    chave.encerradaEm =
+      new Date().toISOString();
+
+    recalcularRanking(
+      dados,
+      dados.mesAtual
+    );
+
+    await interaction.reply({
+      content:
+        `🏆 **CHAVE BDR ${numero} ENCERRADA!**\n\n` +
+        `🥇 Campeão: <@${idsResultado[0]}> — **+5 pts**\n` +
+        `🥈 Vice: <@${idsResultado[1]}> — **+3 pts**\n` +
+        `✅ Passou: <@${idsResultado[2]}> — **+1 pt**\n` +
+        `✅ Passou: <@${idsResultado[3]}> — **+1 pt**\n\n` +
+        `📊 Ranking atualizado!`
+    });
+
+    return;
+  }
+
+  if (interaction.customId.startsWith("editar_chave_")) {
+
+    const numero = Number(
+      interaction.customId.replace("editar_chave_", "")
+    );
+
+    const dados = garantirMesAtual();
+
+    const chave = dados.chaves.find(
+      c =>
+        c.numero === numero &&
+        c.mes === dados.mesAtual
+    );
+
+    if (!chave) {
+      return interaction.reply({
+        content: "❌ Chave não encontrada.",
+        ephemeral: true
+      });
+    }
+
+    const campos = [
+      "campeao",
+      "vice",
+      "passou1",
+      "passou2"
+    ];
+
+    const ids = [];
+
+    for (const campo of campos) {
+      const texto =
+        interaction.fields.getTextInputValue(campo);
+
+      const encontrados =
+        extrairIds(texto);
+
+      if (encontrados.length !== 1) {
+        return interaction.reply({
+          content:
+            "❌ Cada campo precisa ter exatamente 1 MC marcado.",
+          ephemeral: true
+        });
+      }
+
+      ids.push(encontrados[0]);
+    }
+
+    if (
+      new Set(ids).size !== ids.length
+    ) {
+      return interaction.reply({
+        content:
+          "❌ Um mesmo MC não pode ocupar duas posições.",
+        ephemeral: true
+      });
+    }
+
+    for (const id of ids) {
+      if (!chave.participantes.includes(id)) {
+        return interaction.reply({
+          content:
+            `❌ <@${id}> não participou desta chave.`,
+          ephemeral: true
+        });
+      }
+    }
+
+    chave.resultado = {
+      campeao: ids[0],
+      vice: ids[1],
+      passou1: ids[2],
+      passou2: ids[3]
+    };
+
+    chave.fechada = true;
+
+    recalcularRanking(
+      dados,
+      dados.mesAtual
+    );
+
+    await interaction.reply({
+      content:
+        `✅ **Chave ${numero} editada com sucesso!**\n\n` +
+        `🥇 <@${ids[0]}> — +5\n` +
+        `🥈 <@${ids[1]}> — +3\n` +
+        `✅ <@${ids[2]}> — +1\n` +
+        `✅ <@${ids[3]}> — +1\n\n` +
+        `📊 Ranking recalculado.`
+    });
+
+    return;
+  }
+}
+
+// =========================
+// BOTÕES
+// =========================
+
+if (interaction.isButton()) {
+
+  if (interaction.customId.startsWith("encerrar_chave_")) {
+
+    const numero = Number(
+      interaction.customId.replace("encerrar_chave_", "")
+    );
+
+    const dados = garantirMesAtual();
+
+    const chave = dados.chaves.find(
+      c =>
+        c.numero === numero &&
+        c.mes === dados.mesAtual
+    );
+
+    if (!chave) {
+      return interaction.reply({
+        content: "❌ Chave não encontrada.",
+        ephemeral: true
+      });
+    }
+
+    if (chave.fechada) {
+      return interaction.reply({
+        content:
+          "❌ Essa chave já foi encerrada.",
+        ephemeral: true
+      });
+    }
+
+    const modal = new ModalBuilder()
+      .setCustomId(`resultado_chave_${numero}`)
+      .setTitle(`Resultado — Chave ${numero}`);
+
+    const criarCampo = (id, label, placeholder) =>
+      new TextInputBuilder()
+        .setCustomId(id)
+        .setLabel(label)
+        .setPlaceholder(placeholder)
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        criarCampo(
+          "campeao",
+          "Campeão",
+          "@MC campeão"
+        )
+      ),
+      new ActionRowBuilder().addComponents(
+        criarCampo(
+          "vice",
+          "Vice-campeão",
+          "@MC vice"
+        )
+      ),
+      new ActionRowBuilder().addComponents(
+        criarCampo(
+          "passou1",
+          "Outro MC que passou",
+          "@MC"
+        )
+      ),
+      new ActionRowBuilder().addComponents(
+        criarCampo(
+          "passou2",
+          "Outro MC que passou",
+          "@MC"
+        )
+      )
+    );
+
+    await interaction.showModal(modal);
+
+    return;
+  }
+
+  if (
+    interaction.customId ===
+    "confirmar_limpar_ranking"
+  ) {
+
+    const dados = carregarChaves();
+
+    if (dados.mesAtual) {
+      dados.historicoMeses.push({
+        mes: dados.mesAtual,
+        ranking: dados.ranking,
+        encerradoEm:
+          new Date().toISOString()
+      });
+    }
+
+    dados.ranking = {};
+    dados.mesAtual = mesAtual();
+
+    salvarChaves(dados);
+
+    await interaction.update({
+      content:
+        `✅ **Ranking encerrado!**\n\n` +
+        `🏆 O ranking de **${nomeMes(dados.mesAtual)}** começou agora.`,
+      components: []
+    });
+
+    return;
+  }
+
+  if (
+    interaction.customId ===
+    "cancelar_limpar_ranking"
+  ) {
+
+    await interaction.update({
+      content: "❌ Limpeza cancelada.",
+      components: []
+    });
+
+    return;
+  }
+}
+
+  } catch (erro) {
+
+    console.error(
+      "ERRO NA INTERAÇÃO:",
+      erro
+    );
+
+    if (
+      !interaction.replied &&
+      !interaction.deferred
+    ) {
       await interaction.reply({
-        content: "❌ Ocorreu um erro ao executar essa ação.",
+        content:
+          "❌ Ocorreu um erro ao executar essa ação.",
         ephemeral: true
       }).catch(() => {});
     }
@@ -853,7 +1254,10 @@ client.on("interactionCreate", async interaction => {
 // =========================
 
 if (!TOKEN) {
-  console.error("❌ DISCORD_TOKEN não encontrado.");
+  console.error(
+    "❌ DISCORD_TOKEN não encontrado."
+  );
+
   process.exit(1);
 }
 
