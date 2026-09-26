@@ -835,4 +835,26 @@ client.on("interactionCreate", async interaction => {
         }
 
         if (new Set(ids).size !== ids.length) {
-          
+              }
+  } catch (erro) {
+    console.error("ERRO NA INTERAÇÃO:", erro);
+
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: "❌ Ocorreu um erro ao executar essa ação.",
+        ephemeral: true
+      }).catch(() => {});
+    }
+  }
+});
+
+// =========================
+// LOGIN
+// =========================
+
+if (!TOKEN) {
+  console.error("❌ DISCORD_TOKEN não encontrado.");
+  process.exit(1);
+}
+
+client.login(TOKEN);
