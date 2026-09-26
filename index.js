@@ -26,64 +26,60 @@ const client = new Client({
 const ADV_FILE = "./advs.json";
 const CHAVES_FILE = "./chaves.json";
 
-// ======================================================
+// =========================
 // ARQUIVOS
-// ======================================================
+// =========================
 
-if (!fs.existsSync(ADV_FILE)) {
-  fs.writeFileSync(ADV_FILE, JSON.stringify({}, null, 2));
+function carregarArquivo(arquivo, padrao) {
+  try {
+    if (!fs.existsSync(arquivo)) {
+      fs.writeFileSync(arquivo, JSON.stringify(padrao, null, 2));
+      return padrao;
+    }
+
+    const conteudo = fs.readFileSync(arquivo, "utf8");
+
+    if (!conteudo.trim()) {
+      fs.writeFileSync(arquivo, JSON.stringify(padrao, null, 2));
+      return padrao;
+    }
+
+    return JSON.parse(conteudo);
+  } catch (erro) {
+    console.error(`Erro ao carregar ${arquivo}:`, erro);
+    return padrao;
+  }
 }
 
-if (!fs.existsSync(CHAVES_FILE)) {
-  fs.writeFileSync(
-    CHAVES_FILE,
-    JSON.stringify(
-      {
-        mesAtual: null,
-        proximaChave: 1,
-        chaves: [],
-        ranking: {},
-        historicoMeses: []
-      },
-      null,
-      2
-    )
-  );
+function salvarArquivo(arquivo, dados) {
+  fs.writeFileSync(arquivo, JSON.stringify(dados, null, 2));
 }
 
 function carregarAdvs() {
-  try {
-    return JSON.parse(fs.readFileSync(ADV_FILE, "utf8"));
-  } catch {
-    return {};
-  }
+  return carregarArquivo(ADV_FILE, {});
 }
 
 function salvarAdvs(dados) {
-  fs.writeFileSync(ADV_FILE, JSON.stringify(dados, null, 2));
+  salvarArquivo(ADV_FILE, dados);
 }
 
 function carregarChaves() {
-  try {
-    return JSON.parse(fs.readFileSync(CHAVES_FILE, "utf8"));
-  } catch {
-    return {
-      mesAtual: null,
-      proximaChave: 1,
-      chaves: [],
-      ranking: {},
-      historicoMeses: []
-    };
-  }
+  return carregarArquivo(CHAVES_FILE, {
+    mesAtual: null,
+    proximaChave: 1,
+    chaves: [],
+    ranking: {},
+    historicoMeses: []
+  });
 }
 
 function salvarChaves(dados) {
-  fs.writeFileSync(CHAVES_FILE, JSON.stringify(dados, null, 2));
+  salvarArquivo(CHAVES_FILE, dados);
 }
 
-// ======================================================
-// SISTEMA DE MÊS
-// ======================================================
+// =========================
+// MESES
+// =========================
 
 function mesAtual() {
   const agora = new Date();
@@ -94,8 +90,6 @@ function mesAtual() {
 }
 
 function nomeMes(mes) {
-  const [ano, numero] = mes.split("-");
-
   const nomes = [
     "Janeiro",
     "Fevereiro",
@@ -111,7 +105,11 @@ function nomeMes(mes) {
     "Dezembro"
   ];
 
-  return `${nomes[Number(numero) - 1]}/${ano}`;
+  if (!mes) return "Mês desconhecido";
+
+  const numero = Number(mes.split("-")[1]);
+
+  return nomes[numero - 1] || "Mês desconhecido";
 }
 
 function garantirMesAtual() {
@@ -125,15 +123,11 @@ function garantirMesAtual() {
   }
 
   if (dados.mesAtual !== mes) {
-    if (Object.keys(dados.ranking).length > 0) {
-      dados.historicoMeses.push({
-        mes: dados.mesAtual,
-        ranking: dados.ranking,
-        chaves: dados.chaves.filter(
-          chave => chave.mes === dados.mesAtual
-        )
-      });
-    }
+    dados.historicoMeses.push({
+      mes: dados.mesAtual,
+      ranking: dados.ranking,
+      encerradoEm: new Date().toISOString()
+    });
 
     dados.mesAtual = mes;
     dados.ranking = {};
@@ -144,60 +138,60 @@ function garantirMesAtual() {
   return dados;
 }
 
-// ======================================================
-// CARGOS DAS ADVERTÊNCIAS
-// ======================================================
+// =========================
+// CARGOS DE ADV
+// =========================
 
-const NOMES_CARGOS = {
-  1: "⚠️ ADV 1",
-  2: "⚠️ ADV 2",
-  3: "⚠️ ADV 3",
-  4: "⚠️ ADV 4"
-};
-
-async function pegarOuCriarCargo(guild, nivel) {
-  const nome = NOMES_CARGOS[nivel];
-
-  let cargo = guild.roles.cache.find(
-    cargo => cargo.name === nome
-  );
+async function pegarOuCriarCargo(guild, nome) {
+  let cargo = guild.roles.cache.find(r => r.name === nome);
 
   if (!cargo) {
     cargo = await guild.roles.create({
       name: nome,
-      reason: "Sistema de advertências da BDR"
+      reason: "Cargo automático do sistema de advertências BDR"
     });
   }
 
   return cargo;
 }
 
-async function aplicarCargo(guild, member, nivel) {
-  for (let i = 1; i <= 4; i++) {
-    const cargo = guild.roles.cache.find(
-      r => r.name === NOMES_CARGOS[i]
-    );
+async function aplicarCargo(member, numero) {
+  const nomes = [
+    "⚠️ ADV 1",
+    "⚠️ ADV 2",
+    "⚠️ ADV 3",
+    "⚠️ ADV 4"
+  ];
+
+  for (const nome of nomes) {
+    const cargo = member.guild.roles.cache.find(r => r.name === nome);
 
     if (cargo && member.roles.cache.has(cargo.id)) {
       await member.roles.remove(cargo).catch(() => {});
     }
   }
 
-  const novoCargo = await pegarOuCriarCargo(guild, nivel);
+  const nomeCargo = nomes[numero - 1];
 
-  await member.roles.add(novoCargo).catch(() => {});
+  if (!nomeCargo) return;
 
-  return novoCargo;
+  const cargo = await pegarOuCriarCargo(member.guild, nomeCargo);
+
+  if (cargo.position >= member.guild.members.me.roles.highest.position) {
+    console.log(`Não consigo gerenciar o cargo ${nomeCargo}.`);
+    return;
+  }
+
+  await member.roles.add(cargo).catch(erro => {
+    console.log("Erro ao adicionar cargo:", erro);
+  });
 }
 
-// ======================================================
+// =========================
 // COMANDOS
-// ======================================================
+// =========================
 
-const commands = [
-
-  // ---------------- ADV ----------------
-
+const comandos = [
   new SlashCommandBuilder()
     .setName("adv")
     .setDescription("Aplica uma advertência a um membro.")
@@ -213,20 +207,18 @@ const commands = [
         .setDescription("Motivo da advertência.")
         .setRequired(true)
     )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .toJSON(),
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
   new SlashCommandBuilder()
     .setName("advlist")
-    .setDescription("Mostra todas as advertências de um membro.")
+    .setDescription("Mostra as advertências de um membro.")
     .addUserOption(option =>
       option
         .setName("membro")
         .setDescription("Membro.")
         .setRequired(true)
     )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .toJSON(),
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
   new SlashCommandBuilder()
     .setName("advremove")
@@ -237,22 +229,18 @@ const commands = [
         .setDescription("Membro.")
         .setRequired(true)
     )
-    .addStringOption(option =>
+    .addIntegerOption(option =>
       option
         .setName("id")
         .setDescription("ID da advertência.")
         .setRequired(true)
     )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .toJSON(),
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
   new SlashCommandBuilder()
     .setName("advs")
-    .setDescription("Lista as advertências recentes.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .toJSON(),
-
-  // ---------------- CHAVES ----------------
+    .setDescription("Mostra as advertências recentes.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
   new SlashCommandBuilder()
     .setName("chavesbdr")
@@ -263,105 +251,78 @@ const commands = [
         .setDescription("Quantidade de MCs.")
         .setRequired(true)
         .addChoices(
-          { name: "Chave de 4", value: 4 },
-          { name: "Chave de 8", value: 8 }
+          { name: "4 MCs", value: 4 },
+          { name: "8 MCs", value: 8 }
         )
     )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .toJSON(),
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
   new SlashCommandBuilder()
     .setName("rankingchaves")
-    .setDescription("Mostra o ranking mensal das Chaves BDR.")
-    .toJSON(),
+    .setDescription("Mostra o ranking das chaves BDR."),
 
   new SlashCommandBuilder()
     .setName("editrankingchaves")
-    .setDescription("Edita o resultado de uma Chave BDR.")
+    .setDescription("Edita o resultado de uma chave.")
     .addIntegerOption(option =>
       option
         .setName("chave")
         .setDescription("Número da chave.")
         .setRequired(true)
-        .setMinValue(1)
     )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .toJSON(),
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
   new SlashCommandBuilder()
     .setName("limparranking")
-    .setDescription("Arquiva o ranking atual e inicia um novo.")
+    .setDescription("Encerra o ranking atual e inicia um novo.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .toJSON()
-];
+].map(comando => comando.toJSON());
 
-// ======================================================
+// =========================
 // REGISTRAR COMANDOS
-// ======================================================
+// =========================
 
-const rest = new REST({ version: "10" }).setToken(TOKEN);
+async function registrarComandos() {
+  const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-(async () => {
   try {
     console.log("Registrando comandos...");
 
     await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: commands }
+      {
+        body: comandos
+      }
     );
 
-    console.log("Comandos registrados!");
-  } catch (error) {
-    console.error(error);
+    console.log("Comandos registrados.");
+  } catch (erro) {
+    console.error("Erro ao registrar comandos:", erro);
   }
-})();
+}
 
-// ======================================================
-// BOT ONLINE
-// ======================================================
-
-client.once("ready", async () => {
-  console.log(`Bot conectado como ${client.user.tag}`);
-
-  garantirMesAtual();
-
-  const guild = client.guilds.cache.get(GUILD_ID);
-
-  if (guild) {
-    for (let i = 1; i <= 4; i++) {
-      await pegarOuCriarCargo(guild, i).catch(() => {});
-    }
-  }
-
-  console.log("Sistema BDR carregado!");
-});
-
-// ======================================================
-// FUNÇÃO PARA PEGAR MENÇÕES
-// ======================================================
+// =========================
+// UTILIDADES DE MENÇÕES
+// =========================
 
 function extrairIds(texto) {
-  const ids = texto.match(/<@!?(\d+)>/g);
+  const encontrados = texto.match(/<@!?(\d+)>/g) || [];
 
-  if (!ids) return [];
-
-  return ids.map(
-    mencao => mencao.replace(/[<@!>]/g, "")
+  return encontrados.map(mencao =>
+    mencao.replace(/[<@!>]/g, "")
   );
 }
 
-// ======================================================
-// CRIAR CONFRONTOS
-// ======================================================
-
-function criarConfrontos(participantes) {
-  const embaralhados = [...participantes];
+function criarConfrontos(ids) {
+  const embaralhados = [...ids];
 
   for (let i = embaralhados.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
 
-    [embaralhados[i], embaralhados[j]] =
-      [embaralhados[j], embaralhados[i]];
+    [embaralhados[i], embaralhados[j]] = [
+      embaralhados[j],
+      embaralhados[i]
+    ];
   }
 
   const confrontos = [];
@@ -376,35 +337,25 @@ function criarConfrontos(participantes) {
   return confrontos;
 }
 
-// ======================================================
-// ATUALIZAR RANKING
-// ======================================================
+// =========================
+// RANKING
+// =========================
 
 function recalcularRanking(dados, mes) {
   const ranking = {};
 
-  const chaves = dados.chaves.filter(
-    chave =>
-      chave.mes === mes &&
-      chave.encerrada &&
-      chave.resultado
-  );
+  for (const chave of dados.chaves) {
+    if (chave.mes !== mes) continue;
+    if (!chave.fechada || !chave.resultado) continue;
 
-  for (const chave of chaves) {
     const resultado = chave.resultado;
 
     const adicionar = (id, pontos) => {
-      if (!id) return;
-
       if (!ranking[id]) {
-        ranking[id] = {
-          pontos: 0,
-          chaves: 0
-        };
+        ranking[id] = 0;
       }
 
-      ranking[id].pontos += pontos;
-      ranking[id].chaves += 1;
+      ranking[id] += pontos;
     };
 
     adicionar(resultado.campeao, 5);
@@ -418,526 +369,470 @@ function recalcularRanking(dados, mes) {
   salvarChaves(dados);
 }
 
-// ======================================================
+// =========================
+// BOT ONLINE
+// =========================
+
+client.once("ready", async () => {
+  console.log(`Bot online como ${client.user.tag}`);
+
+  garantirMesAtual();
+
+  await registrarComandos();
+});
+
+// =========================
 // INTERAÇÕES
-// ======================================================
+// =========================
 
 client.on("interactionCreate", async interaction => {
+  try {
+
+    // =====================================
+    // COMANDOS SLASH
+    // =====================================
+
+    if (interaction.isChatInputCommand()) {
+
+      // =========================
+      // /ADV
+      // =========================
+
+      if (interaction.commandName === "adv") {
+        const membro = interaction.options.getMember("membro");
+        const usuario = interaction.options.getUser("membro");
+        const motivo = interaction.options.getString("motivo");
+
+        if (!membro) {
+          return interaction.reply({
+            content: "❌ Não encontrei esse membro no servidor.",
+            ephemeral: true
+          });
+        }
+
+        if (membro.id === interaction.user.id) {
+          return interaction.reply({
+            content: "❌ Você não pode aplicar ADV em si mesmo.",
+            ephemeral: true
+          });
+        }
+
+        const dados = carregarAdvs();
+
+        if (!dados[membro.id]) {
+          dados[membro.id] = {
+            total: 0,
+            historico: []
+          };
+        }
+
+        dados[membro.id].total++;
+
+        const numero = dados[membro.id].total;
+
+        const advertencia = {
+          id: dados[membro.id].historico.length + 1,
+          numero,
+          motivo,
+          aplicadoPor: interaction.user.id,
+          data: new Date().toISOString()
+        };
+
+        dados[membro.id].historico.push(advertencia);
+
+        salvarAdvs(dados);
+
+        if (numero <= 4) {
+          await aplicarCargo(membro, numero);
+        }
+
+        let resposta =
+          `⚠️ **ADVERTÊNCIA APLICADA**\n\n` +
+          `👤 Membro: <@${usuario.id}>\n` +
+          `📌 ADV: **${numero}**\n` +
+          `📝 Motivo: **${motivo}**`;
+
+        // ADV 2
+        if (numero === 2) {
+          await membro.timeout(
+            60 * 60 * 1000,
+            `ADV 2: ${motivo}`
+          ).catch(() => {});
+
+          resposta +=
+            `\n\n⏱️ **Punição:** Timeout de 1 hora.`;
+
+          setTimeout(async () => {
+            await membro.timeout(null).catch(() => {});
+          }, 60 * 60 * 1000);
+        }
+
+        // ADV 3
+        if (numero === 3) {
+          await membro.timeout(
+            24 * 60 * 60 * 1000,
+            `ADV 3: ${motivo}`
+          ).catch(() => {});
+
+          resposta +=
+            `\n\n⏱️ **Punição:** Timeout de 1 dia.`;
+
+          setTimeout(async () => {
+            await membro.timeout(null).catch(() => {});
+          }, 24 * 60 * 60 * 1000);
+        }
+
+        // ADV 4
+        if (numero === 4) {
+          resposta +=
+            `\n\n🚪 **Punição:** Membro expulso do servidor.`;
+
+          await membro.kick(`ADV 4: ${motivo}`).catch(() => {});
+        }
 
-  // ====================================================
-  // /ADV
-  // ====================================================
-
-  if (interaction.isChatInputCommand() &&
-      interaction.commandName === "adv") {
-
-    const membro = interaction.options.getMember("membro");
-    const usuario = interaction.options.getUser("membro");
-    const motivo = interaction.options.getString("motivo");
-
-    if (!membro || !usuario) {
-      return interaction.reply({
-        content: "❌ Não consegui encontrar esse membro.",
-        ephemeral: true
-      });
-    }
-
-    if (usuario.bot) {
-      return interaction.reply({
-        content: "❌ Bots não podem receber advertências.",
-        ephemeral: true
-      });
-    }
-
-    const advs = carregarAdvs();
-
-    if (!advs[usuario.id]) {
-      advs[usuario.id] = {
-        total: 0,
-        historico: []
-      };
-    }
-
-    if (advs[usuario.id].total >= 4) {
-      return interaction.reply({
-        content: "❌ Esse membro já atingiu 4 advertências.",
-        ephemeral: true
-      });
-    }
-
-    advs[usuario.id].total++;
-
-    const numero = advs[usuario.id].total;
-
-    const id =
-      `ADV-${Date.now().toString(36).toUpperCase()}-${Math.random()
-        .toString(36)
-        .substring(2, 6)
-        .toUpperCase()}`;
-
-    advs[usuario.id].historico.push({
-      id,
-      numero,
-      motivo,
-      data: new Date().toISOString(),
-      aplicador: interaction.user.id
-    });
-
-    salvarAdvs(advs);
-
-    if (numero === 1) {
-
-      await aplicarCargo(interaction.guild, membro, 1);
-
-      await interaction.reply({
-        content:
-          `⚠️ **ADVERTÊNCIA 1 APLICADA**\n\n` +
-          `👤 **Membro:** ${usuario}\n` +
-          `🆔 **ID:** \`${id}\`\n` +
-          `📝 **Motivo:** ${motivo}\n\n` +
-          `📌 Esta é uma advertência formal.`
-      });
-
-    } else if (numero === 2) {
-
-      await aplicarCargo(interaction.guild, membro, 2);
-
-      await membro.timeout(
-        60 * 60 * 1000,
-        `Advertência 2 — ${motivo}`
-      ).catch(() => {});
-
-      await interaction.reply({
-        content:
-          `🔶 **ADVERTÊNCIA 2 — PUNIÇÃO APLICADA**\n\n` +
-          `👤 **Membro:** ${usuario}\n` +
-          `🆔 **ID:** \`${id}\`\n` +
-          `📝 **Motivo:** ${motivo}\n\n` +
-          `🔇 **Mute:** 1 hora\n` +
-          `⚠️ A próxima advertência será ainda mais grave.`
-      });
-
-      setTimeout(async () => {
-
-        try {
-          const atual =
-            await interaction.guild.members.fetch(usuario.id);
-
-          const cargo =
-            interaction.guild.roles.cache.find(
-              r => r.name === NOMES_CARGOS[2]
-            );
-
-          if (cargo) {
-            await atual.roles.remove(cargo).catch(() => {});
-          }
-
-        } catch {}
-      }, 60 * 60 * 1000);
-
-    } else if (numero === 3) {
-
-      await aplicarCargo(interaction.guild, membro, 3);
-
-      await membro.timeout(
-        24 * 60 * 60 * 1000,
-        `Advertência 3 — ${motivo}`
-      ).catch(() => {});
-
-      await interaction.reply({
-        content:
-          `🔴 **ADVERTÊNCIA 3 — PUNIÇÃO GRAVE**\n\n` +
-          `👤 **Membro:** ${usuario}\n` +
-          `🆔 **ID:** \`${id}\`\n` +
-          `📝 **Motivo:** ${motivo}\n\n` +
-          `🔇 **Mute:** 1 dia\n` +
-          `🚨 A próxima advertência resultará em expulsão.`
-      });
-
-      setTimeout(async () => {
-
-        try {
-          const atual =
-            await interaction.guild.members.fetch(usuario.id);
-
-          const cargo =
-            interaction.guild.roles.cache.find(
-              r => r.name === NOMES_CARGOS[3]
-            );
-
-          if (cargo) {
-            await atual.roles.remove(cargo).catch(() => {});
-          }
-
-        } catch {}
-      }, 24 * 60 * 60 * 1000);
-
-    } else if (numero === 4) {
-
-      await aplicarCargo(interaction.guild, membro, 4);
-
-      await interaction.reply({
-        content:
-          `🚨 **ADVERTÊNCIA 4 — EXPULSÃO**\n\n` +
-          `👤 **Membro:** ${usuario}\n` +
-          `🆔 **ID:** \`${id}\`\n` +
-          `📝 **Motivo:** ${motivo}\n\n` +
-          `⛔ O membro atingiu a 4ª advertência.`
-      });
-
-      setTimeout(async () => {
-        await membro.kick(
-          `4ª advertência — ${motivo}`
-        ).catch(() => {});
-      }, 1500);
-    }
-
-    try {
-      await usuario.send(
-        `⚠️ **Você recebeu uma advertência na BDR.**\n\n` +
-        `📋 **Advertência:** ${numero}/4\n` +
-        `🆔 **ID:** ${id}\n` +
-        `📝 **Motivo:** ${motivo}`
-      );
-    } catch {}
-  }
-
-  // ====================================================
-  // /ADVLIST
-  // ====================================================
-
-  if (interaction.isChatInputCommand() &&
-      interaction.commandName === "advlist") {
-
-    const usuario =
-      interaction.options.getUser("membro");
-
-    const advs = carregarAdvs();
-
-    if (!advs[usuario.id] ||
-        advs[usuario.id].historico.length === 0) {
-
-      return interaction.reply({
-        content:
-          `📋 **${usuario.username}** não possui advertências.`,
-        ephemeral: true
-      });
-    }
-
-    let texto =
-      `📋 **HISTÓRICO DE ADVERTÊNCIAS**\n` +
-      `👤 ${usuario}\n` +
-      `📊 Total: **${advs[usuario.id].total}**\n\n`;
-
-    for (const adv of advs[usuario.id].historico) {
-
-      texto +=
-        `**ADV ${adv.numero}**\n` +
-        `🆔 \`${adv.id}\`\n` +
-        `📝 ${adv.motivo}\n` +
-        `📅 ${new Date(adv.data).toLocaleString("pt-BR")}\n` +
-        `👮 <@${adv.aplicador}>\n\n`;
-    }
-
-    return interaction.reply({
-      content: texto
-    });
-  }
-
-  // ====================================================
-  // /ADVREMOVE
-  // ====================================================
-
-  if (interaction.isChatInputCommand() &&
-      interaction.commandName === "advremove") {
-
-    const usuario =
-      interaction.options.getUser("membro");
-
-    const id =
-      interaction.options.getString("id");
-
-    const advs = carregarAdvs();
-
-    if (!advs[usuario.id]) {
-      return interaction.reply({
-        content: "❌ Esse membro não possui advertências.",
-        ephemeral: true
-      });
-    }
-
-    const indice =
-      advs[usuario.id].historico.findIndex(
-        adv => adv.id === id
-      );
-
-    if (indice === -1) {
-      return interaction.reply({
-        content:
-          `❌ Advertência \`${id}\` não encontrada.`,
-        ephemeral: true
-      });
-    }
-
-    const removida =
-      advs[usuario.id].historico[indice];
-
-    advs[usuario.id].historico.splice(indice, 1);
-
-    advs[usuario.id].total =
-      advs[usuario.id].historico.length;
-
-    salvarAdvs(advs);
-
-    return interaction.reply({
-      content:
-        `✅ **ADVERTÊNCIA REMOVIDA**\n\n` +
-        `👤 ${usuario}\n` +
-        `🆔 \`${removida.id}\`\n` +
-        `📝 ${removida.motivo}\n\n` +
-        `📊 Total atual: **${advs[usuario.id].total}**`
-    });
-  }
-
-  // ====================================================
-  // /ADVS
-  // ====================================================
-
-  if (interaction.isChatInputCommand() &&
-      interaction.commandName === "advs") {
-
-    const advs = carregarAdvs();
-    const todas = [];
-
-    for (const [userId, dados] of Object.entries(advs)) {
-
-      for (const adv of dados.historico) {
-        todas.push({
-          userId,
-          ...adv
+        // Acima de 4
+        if (numero > 4) {
+          resposta +=
+            `\n\n⚠️ O membro já ultrapassou o limite de 4 ADVs.`;
+        }
+
+        await interaction.reply({
+          content: resposta
         });
+
+        return;
       }
-    }
 
-    todas.sort(
-      (a, b) =>
-        new Date(b.data) - new Date(a.data)
-    );
+      // =========================
+      // /ADVLIST
+      // =========================
 
-    const recentes = todas.slice(0, 10);
+      if (interaction.commandName === "advlist") {
+        const usuario = interaction.options.getUser("membro");
+        const dados = carregarAdvs();
 
-    if (recentes.length === 0) {
-      return interaction.reply({
-        content:
-          "📋 Nenhuma advertência registrada."
-      });
-    }
+        const registro = dados[usuario.id];
 
-    let texto =
-      `📋 **ADVERTÊNCIAS RECENTES — BDR**\n\n`;
+        if (!registro || registro.historico.length === 0) {
+          return interaction.reply({
+            content: `✅ <@${usuario.id}> não possui advertências registradas.`,
+            ephemeral: true
+          });
+        }
 
-    for (const adv of recentes) {
+        let texto =
+          `⚠️ **ADVERTÊNCIAS DE <@${usuario.id}>**\n\n`;
 
-      texto +=
-        `**ADV ${adv.numero}** — <@${adv.userId}>\n` +
-        `🆔 \`${adv.id}\`\n` +
-        `📝 ${adv.motivo}\n` +
-        `📅 ${new Date(adv.data).toLocaleString("pt-BR")}\n\n`;
-    }
+        for (const adv of registro.historico) {
+          texto +=
+            `**ADV ${adv.numero}** — ID ${adv.id}\n` +
+            `📝 ${adv.motivo}\n` +
+            `👮 Aplicada por: <@${adv.aplicadoPor}>\n\n`;
+        }
 
-    return interaction.reply({
-      content: texto
-    });
-  }
+        await interaction.reply({
+          content: texto
+        });
 
-  // ====================================================
-  // /CHAVESBDR
-  // ====================================================
+        return;
+      }
 
-  if (interaction.isChatInputCommand() &&
-      interaction.commandName === "chavesbdr") {
+      // =========================
+      // /ADVREMOVE
+      // =========================
 
-    const tamanho =
-      interaction.options.getInteger("tamanho");
+      if (interaction.commandName === "advremove") {
+        const usuario = interaction.options.getUser("membro");
+        const id = interaction.options.getInteger("id");
 
-    const modal =
-      new ModalBuilder()
-        .setCustomId(`criar_chave_${tamanho}`)
-        .setTitle(`Chave BDR de ${tamanho}`);
+        const dados = carregarAdvs();
 
-    const participantes =
-      new TextInputBuilder()
-        .setCustomId("participantes")
-        .setLabel(`Coloque os ${tamanho} MCs`)
-        .setPlaceholder("@MC1 @MC2 @MC3 ...")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setMinLength(tamanho * 2);
+        if (!dados[usuario.id]) {
+          return interaction.reply({
+            content: "❌ Esse membro não possui ADVs.",
+            ephemeral: true
+          });
+        }
 
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(participantes)
-    );
+        const indice = dados[usuario.id].historico.findIndex(
+          adv => adv.id === id
+        );
 
-    return interaction.showModal(modal);
-  }
+        if (indice === -1) {
+          return interaction.reply({
+            content: "❌ ADV não encontrada.",
+            ephemeral: true
+          });
+        }
 
-  // ====================================================
-  // MODAL — CRIAR CHAVE
-  // ====================================================
+        dados[usuario.id].historico.splice(indice, 1);
 
-  if (
-    interaction.isModalSubmit() &&
-    interaction.customId.startsWith("criar_chave_")
-  ) {
+        salvarAdvs(dados);
 
-    const tamanho =
-      Number(
-        interaction.customId.replace(
-          "criar_chave_",
-          ""
-        )
-      );
+        await interaction.reply({
+          content:
+            `✅ ADV **${id}** de <@${usuario.id}> foi removida do histórico.`
+        });
 
-    const texto =
-      interaction.fields.getTextInputValue(
-        "participantes"
-      );
+        return;
+      }
 
-    const ids = extrairIds(texto);
+      // =========================
+      // /ADVS
+      // =========================
 
-    if (ids.length !== tamanho) {
-      return interaction.reply({
-        content:
-          `❌ Você colocou **${ids.length}** MCs, mas a chave precisa de **${tamanho}**.`,
-        ephemeral: true
-      });
-    }
+      if (interaction.commandName === "advs") {
+        const dados = carregarAdvs();
 
-    if (new Set(ids).size !== ids.length) {
-      return interaction.reply({
-        content:
-          "❌ Um MC foi colocado mais de uma vez.",
-        ephemeral: true
-      });
-    }
+        const lista = [];
 
-    const dados = garantirMesAtual();
+        for (const [userId, registro] of Object.entries(dados)) {
+          for (const adv of registro.historico) {
+            lista.push({
+              userId,
+              ...adv
+            });
+          }
+        }
 
-    const numero = dados.proximaChave;
+        lista.sort(
+          (a, b) =>
+            new Date(b.data) - new Date(a.data)
+        );
 
-    dados.proximaChave++;
+        const recentes = lista.slice(0, 10);
 
-    const confrontos =
-      criarConfrontos(ids);
+        if (recentes.length === 0) {
+          return interaction.reply({
+            content: "✅ Nenhuma advertência registrada."
+          });
+        }
 
-    const chave = {
-      numero,
-      mes: dados.mesAtual,
-      tamanho,
-      participantes: ids,
-      confrontos,
-      encerrada: false,
-      resultado: null,
-      criadaEm: new Date().toISOString()
-    };
+        let texto = "⚠️ **ADVERTÊNCIAS RECENTES**\n\n";
 
-    dados.chaves.push(chave);
+        for (const adv of recentes) {
+          texto +=
+            `👤 <@${adv.userId}> — **ADV ${adv.numero}**\n` +
+            `📝 ${adv.motivo}\n` +
+            `👮 <@${adv.aplicadoPor}>\n\n`;
+        }
 
-    salvarChaves(dados);
+        await interaction.reply({
+          content: texto
+        });
 
-    let mensagem =
-      `🏆 **CHAVE BDR ${numero}**\n\n` +
-      `👥 **${tamanho} MCs**\n\n`;
+        return;
+      }
 
-    confrontos.forEach((confronto, index) => {
+      // =========================
+      // /CHAVESBDR
+      // =========================
 
-      mensagem +=
-        `⚔️ **Confronto ${index + 1}**\n` +
-        `<@${confronto.mc1}> 🆚 <@${confronto.mc2}>\n\n`;
-    });
+      if (interaction.commandName === "chavesbdr") {
+        const tamanho =
+          interaction.options.getInteger("tamanho");
 
-    mensagem +=
-  `📅 **${nomeMes(dados.mesAtual)}**\n` +
-  `🔒 Chave aberta — clique abaixo para encerrar.`;
+        const modal = new ModalBuilder()
+          .setCustomId(`criar_chave_${tamanho}`)
+          .setTitle(`Criar Chave BDR — ${tamanho} MCs`);
 
-    const botao = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`encerrar_chave_${numero}`)
-        .setLabel("Encerrar Chave")
-        .setStyle(ButtonStyle.Danger)
-    );
+        const campo = new TextInputBuilder()
+          .setCustomId("mcs")
+          .setLabel(`Mande os ${tamanho} MCs`)
+          .setPlaceholder(
+            "Ex: @MC1 @MC2 @MC3 @MC4"
+          )
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true);
 
-    await interaction.reply({
-      content: mensagem,
-      components: [botao]
-    });
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(campo)
+        );
 
-    return;
-  }
+        await interaction.showModal(modal);
 
-  if (interaction.isButton()) {
-    if (interaction.customId.startsWith("encerrar_chave_")) {
-      const numero = Number(
-        interaction.customId.replace("encerrar_chave_", "")
-      );
+        return;
+      }
 
-      const dados = carregarChaves();
-      const chave = dados.chaves.find(c => c.numero === numero);
+      // =========================
+      // /RANKINGCHAVES
+      // =========================
 
-      if (!chave) {
-        return interaction.reply({
-          content: "❌ Chave não encontrada.",
+      if (interaction.commandName === "rankingchaves") {
+        const dados = garantirMesAtual();
+
+        const ranking = Object.entries(dados.ranking)
+          .sort((a, b) => b[1] - a[1]);
+
+        if (ranking.length === 0) {
+          return interaction.reply({
+            content:
+              `🏆 **RANKING BDR — ${nomeMes(dados.mesAtual)}**\n\n` +
+              `Ainda não existem pontos neste mês.`
+          });
+        }
+
+        let texto =
+          `🏆 **RANKING BDR — ${nomeMes(dados.mesAtual)}**\n\n`;
+
+        ranking.forEach(([id, pontos], index) => {
+          texto +=
+            `**${index + 1}.** <@${id}> — **${pontos} pts**\n`;
+        });
+
+        await interaction.reply({
+          content: texto
+        });
+
+        return;
+      }
+
+      // =========================
+      // /EDITRANKINGCHAVES
+      // =========================
+
+      if (interaction.commandName === "editrankingchaves") {
+        const numero =
+          interaction.options.getInteger("chave");
+
+        const dados = garantirMesAtual();
+
+        const chave = dados.chaves.find(
+          c =>
+            c.numero === numero &&
+            c.mes === dados.mesAtual
+        );
+
+        if (!chave) {
+          return interaction.reply({
+            content: "❌ Chave não encontrada neste mês.",
+            ephemeral: true
+          });
+        }
+
+        if (!chave.resultado) {
+          return interaction.reply({
+            content:
+              "❌ Essa chave ainda não possui resultado.",
+            ephemeral: true
+          });
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId(`editar_chave_${numero}`)
+          .setTitle(`Editar Chave ${numero}`);
+
+        const criarCampo = (
+          id,
+          label,
+          valor
+        ) => {
+          return new TextInputBuilder()
+            .setCustomId(id)
+            .setLabel(label)
+            .setValue(`<@${valor}>`)
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true);
+        };
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(
+            criarCampo(
+              "campeao",
+              "Campeão",
+              chave.resultado.campeao
+            )
+          ),
+          new ActionRowBuilder().addComponents(
+            criarCampo(
+              "vice",
+              "Vice",
+              chave.resultado.vice
+            )
+          ),
+          new ActionRowBuilder().addComponents(
+            criarCampo(
+              "passou1",
+              "Passou 1",
+              chave.resultado.passou1
+            )
+          ),
+          new ActionRowBuilder().addComponents(
+            criarCampo(
+              "passou2",
+              "Passou 2",
+              chave.resultado.passou2
+            )
+          )
+        );
+
+        await interaction.showModal(modal);
+
+        return;
+      }
+
+      // =========================
+      // /LIMPARRANKING
+      // =========================
+
+      if (interaction.commandName === "limparranking") {
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId("confirmar_limpar_ranking")
+            .setLabel("Confirmar")
+            .setStyle(ButtonStyle.Danger),
+
+          new ButtonBuilder()
+            .setCustomId("cancelar_limpar_ranking")
+            .setLabel("Cancelar")
+            .setStyle(ButtonStyle.Secondary)
+        );
+
+        await interaction.reply({
+          content:
+            "⚠️ **Tem certeza que deseja encerrar o ranking atual?**\n\n" +
+            "O ranking será arquivado e um novo ranking será iniciado.",
+          components: [row],
           ephemeral: true
         });
+
+        return;
       }
-
-      if (chave.fechada) {
-        return interaction.reply({
-          content: "❌ Essa chave já foi encerrada.",
-          ephemeral: true
-        });
-      }
-
-      const modal = new ModalBuilder()
-        .setCustomId(`resultado_chave_${numero}`)
-        .setTitle(`Resultado — Chave ${numero}`);
-
-      const campeao = new TextInputBuilder()
-        .setCustomId("campeao")
-        .setLabel("Campeão")
-        .setPlaceholder("@MC campeão")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const vice = new TextInputBuilder()
-        .setCustomId("vice")
-        .setLabel("Vice-campeão")
-        .setPlaceholder("@MC vice")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const passou1 = new TextInputBuilder()
-        .setCustomId("passou1")
-        .setLabel("Outro MC que passou")
-        .setPlaceholder("@MC")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const passou2 = new TextInputBuilder()
-        .setCustomId("passou2")
-        .setLabel("Outro MC que passou")
-        .setPlaceholder("@MC")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(campeao),
-        new ActionRowBuilder().addComponents(vice),
-        new ActionRowBuilder().addComponents(passou1),
-        new ActionRowBuilder().addComponents(passou2)
-      );
-
-      await interaction.showModal(modal);
-      return;
     }
-  }
+
+    // =====================================
+    // MODAIS
+    // =====================================
+
+    if (interaction.isModalSubmit()) {
+
+      // =========================
+      // CRIAR CHAVE
+      // =========================
+
+      if (
+        interaction.customId.startsWith("criar_chave_")
+      ) {
+        const tamanho = Number(
+          interaction.customId.replace(
+            "criar_chave_",
+            ""
+          )
+        );
+
+        const texto =
+          interaction.fields.getTextInputValue("mcs");
+
+        const ids = extrairIds(texto);
+
+        if (ids.length !== tamanho) {
+          return interaction.reply({
+            content:
+              `❌ Você precisa marcar exatamente **${tamanho} MCs**.\n` +
+              `Você marcou **${ids.length}**.`,
+            ephemeral: true
+          });
+        }
+
+        if (new Set(ids).size !== ids.length) {
+          
