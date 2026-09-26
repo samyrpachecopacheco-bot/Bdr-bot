@@ -857,5 +857,87 @@ client.on("interactionCreate", async interaction => {
     });
 
     mensagem +=
-      `📅 **${nomeMes(dados.mesAtual)}**\n` +
-      `🔒
+  `📅 **${nomeMes(dados.mesAtual)}**\n` +
+  `🔒 Chave aberta — clique abaixo para encerrar.`;
+
+    const botao = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`encerrar_chave_${numero}`)
+        .setLabel("Encerrar Chave")
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    await interaction.reply({
+      content: mensagem,
+      components: [botao]
+    });
+
+    return;
+  }
+
+  if (interaction.isButton()) {
+    if (interaction.customId.startsWith("encerrar_chave_")) {
+      const numero = Number(
+        interaction.customId.replace("encerrar_chave_", "")
+      );
+
+      const dados = carregarChaves();
+      const chave = dados.chaves.find(c => c.numero === numero);
+
+      if (!chave) {
+        return interaction.reply({
+          content: "❌ Chave não encontrada.",
+          ephemeral: true
+        });
+      }
+
+      if (chave.fechada) {
+        return interaction.reply({
+          content: "❌ Essa chave já foi encerrada.",
+          ephemeral: true
+        });
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId(`resultado_chave_${numero}`)
+        .setTitle(`Resultado — Chave ${numero}`);
+
+      const campeao = new TextInputBuilder()
+        .setCustomId("campeao")
+        .setLabel("Campeão")
+        .setPlaceholder("@MC campeão")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const vice = new TextInputBuilder()
+        .setCustomId("vice")
+        .setLabel("Vice-campeão")
+        .setPlaceholder("@MC vice")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const passou1 = new TextInputBuilder()
+        .setCustomId("passou1")
+        .setLabel("Outro MC que passou")
+        .setPlaceholder("@MC")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const passou2 = new TextInputBuilder()
+        .setCustomId("passou2")
+        .setLabel("Outro MC que passou")
+        .setPlaceholder("@MC")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(campeao),
+        new ActionRowBuilder().addComponents(vice),
+        new ActionRowBuilder().addComponents(passou1),
+        new ActionRowBuilder().addComponents(passou2)
+      );
+
+      await interaction.showModal(modal);
+      return;
+    }
+  }
