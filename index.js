@@ -8,7 +8,8 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  UserSelectMenuBuilder
+  UserSelectMenuBuilder,
+  StringSelectMenuBuilder
 } = require("discord.js");
 
 const fs = require("fs");
@@ -26,6 +27,7 @@ const CHAVES_FILE = "./chaves.json";
 
 // Guarda resultados que ainda estão sendo preenchidos
 const resultadosPendentes = new Map();
+const criacoesPendentes = new Map();
 
 // =========================
 // ARQUIVOS
@@ -354,100 +356,17 @@ const comandos = [
 
   new SlashCommandBuilder()
     .setName("chavesbdr")
-    .setDescription(
-      "Cria uma nova chave da BDR."
-    )
+    .setDescription("Cria uma nova chave da BDR.")
     .addIntegerOption(option =>
       option
         .setName("tamanho")
-        .setDescription(
-          "Quantidade de MCs."
-        )
+        .setDescription("Quantidade de MCs na chave.")
         .setRequired(true)
         .addChoices(
-          {
-            name: "4 MCs",
-            value: 4
-          },
-          {
-            name: "8 MCs",
-            value: 8
-          }
+          { name: "4 MCs", value: 4 },
+          { name: "8 MCs", value: 8 }
         )
     )
-
-    .addUserOption(option =>
-      option
-        .setName("mc1")
-        .setDescription(
-          "Primeiro MC"
-        )
-        .setRequired(true)
-    )
-
-    .addUserOption(option =>
-      option
-        .setName("mc2")
-        .setDescription(
-          "Segundo MC"
-        )
-        .setRequired(true)
-    )
-
-    .addUserOption(option =>
-      option
-        .setName("mc3")
-        .setDescription(
-          "Terceiro MC"
-        )
-        .setRequired(true)
-    )
-
-    .addUserOption(option =>
-      option
-        .setName("mc4")
-        .setDescription(
-          "Quarto MC"
-        )
-        .setRequired(true)
-    )
-
-    .addUserOption(option =>
-      option
-        .setName("mc5")
-        .setDescription(
-          "Quinto MC"
-        )
-        .setRequired(false)
-    )
-
-    .addUserOption(option =>
-      option
-        .setName("mc6")
-        .setDescription(
-          "Sexto MC"
-        )
-        .setRequired(false)
-    )
-
-    .addUserOption(option =>
-      option
-        .setName("mc7")
-        .setDescription(
-          "Sétimo MC"
-        )
-        .setRequired(false)
-    )
-
-    .addUserOption(option =>
-      option
-        .setName("mc8")
-        .setDescription(
-          "Oitavo MC"
-        )
-        .setRequired(false)
-    )
-
     .setDefaultMemberPermissions(
       PermissionFlagsBits.ManageMessages
     ),
@@ -636,97 +555,76 @@ function recalcularRanking(
 }
 
 // =========================
-// MENU DE RESULTADO
+// MENUS DE RESULTADO
 // =========================
 
 function criarMenuResultado(
   numero,
   campo,
   placeholder,
-  selecionado
+  selecionado,
+  participantes
 ) {
-  const menu =
-    new UserSelectMenuBuilder()
-      .setCustomId(
-        `resultado_select_${numero}_${campo}`
-      )
-      .setPlaceholder(
-        placeholder
-      )
-      .setMinValues(1)
-      .setMaxValues(1);
-
-  if (selecionado) {
-    menu.setDefaultUsers(
-      selecionado
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`resultado_select_${numero}_${campo}`)
+    .setPlaceholder(placeholder)
+    .setMinValues(1)
+    .setMaxValues(1)
+    .addOptions(
+      participantes.map((id, index) => ({
+        label: `MC ${index + 1}`,
+        description: `Selecionar <@${id}>`,
+        value: id,
+        default: selecionado === id
+      }))
     );
-  }
 
-  return new ActionRowBuilder()
-    .addComponents(menu);
+  return new ActionRowBuilder().addComponents(menu);
 }
 
-function criarComponentesResultado(
-  numero,
-  resultado
-) {
+function criarComponentesResultado(numero, resultado, participantes) {
   const componentes = [
     criarMenuResultado(
-      numero,
-      "campeao",
-      "🥇 Selecionar campeão",
-      resultado.campeao
+      numero, "campeao", "🥇 Selecionar campeão",
+      resultado.campeao, participantes
     ),
-
     criarMenuResultado(
-      numero,
-      "vice",
-      "🥈 Selecionar vice-campeão",
-      resultado.vice
+      numero, "vice", "🥈 Selecionar vice-campeão",
+      resultado.vice, participantes
     ),
-
     criarMenuResultado(
-      numero,
-      "passou1",
-      "✅ Selecionar MC que passou",
-      resultado.passou1
+      numero, "passou1", "✅ Selecionar classificado",
+      resultado.passou1, participantes
     ),
-
     criarMenuResultado(
-      numero,
-      "passou2",
-      "✅ Selecionar outro MC que passou",
-      resultado.passou2
+      numero, "passou2", "✅ Selecionar outro classificado",
+      resultado.passou2, participantes
     )
   ];
 
-  const todosPreenchidos =
+  const preenchido =
     resultado.campeao &&
     resultado.vice &&
     resultado.passou1 &&
     resultado.passou2;
 
-  const botao =
-    new ButtonBuilder()
-      .setCustomId(
-        `confirmar_resultado_${numero}`
-      )
-      .setLabel(
-        "Confirmar resultado"
-      )
-      .setStyle(
-        ButtonStyle.Success
-      )
-      .setDisabled(
-        !todosPreenchidos
-      );
-
   componentes.push(
-    new ActionRowBuilder()
-      .addComponents(botao)
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`confirmar_resultado_${numero}`)
+        .setLabel("Confirmar resultado")
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(!preenchido)
+    )
   );
 
   return componentes;
+}
+
+function textoParticipantes(ids) {
+  return ids.length
+    ? ids.map((id, i) => `**${i + 1}.** <@${id}>`).join("\n")
+    : "⏳ Nenhum MC selecionado.";
 }
 
 // =========================
@@ -1114,135 +1012,49 @@ client.on(
           "chavesbdr"
         ) {
           const tamanho =
-            interaction.options.getInteger(
-              "tamanho"
-            );
+            interaction.options.getInteger("tamanho");
 
-          const ids = [];
+          const chaveDados =
+            `${interaction.user.id}_${Date.now()}`;
 
-          for (
-            let i = 1;
-            i <= 8;
-            i++
-          ) {
-            const usuario =
-              interaction.options.getUser(
-                `mc${i}`
-              );
-
-            if (usuario) {
-              ids.push(
-                usuario.id
-              );
-            }
-          }
-
-          if (
-            ids.length !== tamanho
-          ) {
-            return interaction.reply({
-              content:
-                `❌ Para uma chave de **${tamanho} MCs**, você precisa selecionar exatamente **${tamanho} MCs**.\n\n` +
-                `Você selecionou **${ids.length}**.`,
-
-              ephemeral: true
-            });
-          }
-
-          if (
-            new Set(ids).size !==
-            ids.length
-          ) {
-            return interaction.reply({
-              content:
-                "❌ Você não pode selecionar o mesmo MC duas vezes.",
-
-              ephemeral: true
-            });
-          }
-
-          const dados =
-            garantirMesAtual();
-
-          const numero =
-            dados.proximaChave;
-
-          const chave = {
-            numero,
-
-            mes:
-              dados.mesAtual,
-
-            tamanho,
-
-            participantes:
-              ids,
-
-            confrontos:
-              criarConfrontos(
-                ids
-              ),
-
-            fechada: false,
-
-            resultado: null,
-
-            criadaPor:
-              interaction.user.id,
-
-            criadaEm:
-              new Date().toISOString()
-          };
-
-          dados.chaves.push(
-            chave
+          criacoesPendentes.set(
+            chaveDados,
+            { tamanho, participantes: [] }
           );
 
-          dados.proximaChave++;
-
-          salvarChaves(dados);
-
-          const confrontosTexto =
-            chave.confrontos
-              .map(
-                (
-                  confronto,
-                  index
-                ) =>
-                  `**${index + 1}.** <@${confronto.mc1}> × <@${confronto.mc2}>`
+          const seletor =
+            new UserSelectMenuBuilder()
+              .setCustomId(
+                `criar_chave_select_${chaveDados}`
               )
-              .join("\n");
+              .setPlaceholder(
+                `Selecionar ${tamanho} MCs`
+              )
+          .setMinValues(tamanho)
+              .setMaxValues(tamanho);
 
-          const row =
-            new ActionRowBuilder()
-              .addComponents(
-                new ButtonBuilder()
-                  .setCustomId(
-                    `encerrar_chave_${numero}`
-                  )
-                  .setLabel(
-                    "Encerrar chave"
-                  )
-                  .setStyle(
-                    ButtonStyle.Success
-                  )
-              );
+          const confirmar =
+            new ButtonBuilder()
+              .setCustomId(
+                `confirmar_criacao_chave_${chaveDados}`
+              )
+              .setLabel("Criar chave")
+              .setStyle(ButtonStyle.Success)
+              .setDisabled(true);
 
           await interaction.reply({
             content:
-              `🔥 **CHAVE ${numero} CRIADA!**\n\n` +
-              `👥 **MCs:**\n` +
-              ids
-                .map(
-                  id =>
-                    `• <@${id}>`
-                )
-                .join("\n") +
-              `\n\n⚔️ **CONFRONTOS:**\n${confrontosTexto}\n\n` +
-              `📊 **Tamanho:** ${tamanho} MCs\n` +
-              `🏆 **Mês:** ${nomeMes(dados.mesAtual)}`,
-
-            components: [row]
+              `╭━━━━━━〔 ☀️ NOVA CHAVE BDR 〕━━━━━━╮\n\n` +
+              `📊 **Tamanho:** ${tamanho} MCs\n\n` +
+              `Selecione abaixo os **${tamanho} MCs** que participarão da chave.\n\n` +
+              `👥 **Participantes selecionados:**\n` +
+              `⏳ Nenhum MC selecionado.\n\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
+            components: [
+              new ActionRowBuilder().addComponents(seletor),
+              new ActionRowBuilder().addComponents(confirmar)
+            ],
+            ephemeral: true
           });
 
           return;
@@ -1362,7 +1174,8 @@ client.on(
             components:
               criarComponentesResultado(
                 numero,
-                resultado
+                resultado,
+                chave.participantes
               ),
 
             ephemeral: true
@@ -1424,12 +1237,74 @@ client.on(
       // =====================================
 
       if (
-        interaction.isUserSelectMenu()
+        interaction.isUserSelectMenu() ||
+        interaction.isStringSelectMenu()
       ) {
         const partes =
           interaction.customId.split(
             "_"
           );
+
+        if (
+          partes[0] === "criar" &&
+          partes[1] === "chave" &&
+          partes[2] === "select"
+        ) {
+          const chaveDados =
+            partes.slice(3).join("_");
+
+          const pendente =
+            criacoesPendentes.get(chaveDados);
+
+          if (!pendente) {
+            return interaction.reply({
+              content:
+                "❌ Esta criação de chave expirou. Use `/chavesbdr` novamente.",
+              ephemeral: true
+            });
+          }
+
+          pendente.participantes =
+            [...interaction.values];
+
+          const seletor =
+            new UserSelectMenuBuilder()
+              .setCustomId(
+                `criar_chave_select_${chaveDados}`
+              )
+              .setPlaceholder(
+                `Selecionar ${pendente.tamanho} MCs`
+              )
+              .setMinValues(pendente.tamanho)
+              .setMaxValues(pendente.tamanho);
+
+          const confirmar =
+            new ButtonBuilder()
+              .setCustomId(
+                `confirmar_criacao_chave_${chaveDados}`
+              )
+              .setLabel("Criar chave")
+              .setStyle(ButtonStyle.Success)
+              .setDisabled(
+                pendente.participantes.length !==
+                  pendente.tamanho
+              );
+
+          await interaction.update({
+            content:
+              `╭━━━━━━〔 ☀️ NOVA CHAVE BDR 〕━━━━━━╮\n\n` +
+              `📊 **Tamanho:** ${pendente.tamanho} MCs\n\n` +
+              `👥 **Participantes selecionados:**\n` +
+              `${textoParticipantes(pendente.participantes)}\n\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
+            components: [
+              new ActionRowBuilder().addComponents(seletor),
+              new ActionRowBuilder().addComponents(confirmar)
+            ]
+          });
+
+          return;
+        }
 
         if (
           partes[0] ===
@@ -1468,35 +1343,48 @@ client.on(
             resultado
           );
 
+          const dadosResultado =
+            garantirMesAtual();
+
+          const chaveResultado =
+            dadosResultado.chaves.find(
+              c =>
+                c.numero === numero &&
+                c.mes === dadosResultado.mesAtual
+            );
+
           await interaction.update({
             content:
-              `🏆 **RESULTADO — CHAVE ${numero}**\n\n` +
-              `Selecione os 4 resultados.\n\n` +
-              `🥇 Campeão: ${
+              `╭━━━━〔 🏆 RESULTADO DA CHAVE #${numero} 〕━━━━╮\n\n` +
+              `🥇 **Campeão:** ${
                 resultado.campeao
                   ? `<@${resultado.campeao}>`
                   : "⏳ não selecionado"
               }\n` +
-              `🥈 Vice: ${
+              `🥈 **Vice:** ${
                 resultado.vice
                   ? `<@${resultado.vice}>`
                   : "⏳ não selecionado"
               }\n` +
-              `✅ Passou 1: ${
+              `✅ **Classificado:** ${
                 resultado.passou1
                   ? `<@${resultado.passou1}>`
                   : "⏳ não selecionado"
               }\n` +
-              `✅ Passou 2: ${
+              `✅ **Classificado:** ${
                 resultado.passou2
                   ? `<@${resultado.passou2}>`
                   : "⏳ não selecionado"
-              }`,
+              }\n\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
 
             components:
               criarComponentesResultado(
                 numero,
-                resultado
+                resultado,
+                chaveResultado
+                  ? chaveResultado.participantes
+                  : []
               )
           });
 
@@ -1511,6 +1399,108 @@ client.on(
       if (
         interaction.isButton()
       ) {
+
+        // =========================
+        // CONFIRMAR CRIAÇÃO DE CHAVE
+        // =========================
+
+        if (
+          interaction.customId.startsWith(
+            "confirmar_criacao_chave_"
+          )
+        ) {
+          const chaveDados =
+            interaction.customId.replace(
+              "confirmar_criacao_chave_",
+              ""
+            );
+
+          const pendente =
+            criacoesPendentes.get(chaveDados);
+
+          if (!pendente) {
+            return interaction.reply({
+              content:
+                "❌ Esta criação de chave expirou. Use `/chavesbdr` novamente.",
+              ephemeral: true
+            });
+          }
+
+          if (
+            pendente.participantes.length !==
+            pendente.tamanho
+          ) {
+            return interaction.reply({
+              content:
+                `❌ Selecione exatamente **${pendente.tamanho} MCs** antes de criar a chave.`,
+              ephemeral: true
+            });
+          }
+
+          const dados =
+            garantirMesAtual();
+
+          const numero =
+            dados.proximaChave;
+
+          const chave = {
+            numero,
+            mes: dados.mesAtual,
+            tamanho: pendente.tamanho,
+            participantes:
+              pendente.participantes,
+            confrontos:
+              criarConfrontos(
+                pendente.participantes
+              ),
+            fechada: false,
+            resultado: null,
+            criadaPor:
+              interaction.user.id,
+            criadaEm:
+              new Date().toISOString()
+          };
+
+          dados.chaves.push(chave);
+          dados.proximaChave++;
+
+          salvarChaves(dados);
+          criacoesPendentes.delete(chaveDados);
+
+          const confrontosTexto =
+            chave.confrontos
+              .map(
+                (confronto, index) =>
+                  `**${index + 1}.** <@${confronto.mc1}> × <@${confronto.mc2}>`
+              )
+              .join("\n");
+
+          const row =
+            new ActionRowBuilder()
+              .addComponents(
+                new ButtonBuilder()
+                  .setCustomId(
+                    `encerrar_chave_${numero}`
+                  )
+                  .setLabel("Encerrar chave")
+                  .setStyle(
+                    ButtonStyle.Success
+                  )
+              );
+
+          await interaction.update({
+            content:
+              `╭━━━━━━〔 ☀️ CHAVE BDR #${numero} 〕━━━━━━╮\n\n` +
+              `⚔️ **CONFRONTOS**\n\n` +
+              `${confrontosTexto}\n\n` +
+              `━━━━━━━━━━━━━━━━━━━━\n\n` +
+              `📌 **Status:** 🟢 Em andamento\n\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
+            components: [row]
+          });
+
+          return;
+        }
 
         // =========================
         // ENCERRAR CHAVE
@@ -1574,13 +1564,19 @@ client.on(
 
           await interaction.reply({
             content:
-              `🏆 **RESULTADO — CHAVE ${numero}**\n\n` +
-              `Selecione os quatro resultados abaixo.`,
+              `╭━━━━〔 🏆 RESULTADO DA CHAVE #${numero} 〕━━━━╮\n\n` +
+              `Selecione os participantes do resultado:\n\n` +
+              `🥇 **Campeão**\n` +
+              `🥈 **Vice-campeão**\n` +
+              `✅ **Classificado**\n` +
+              `✅ **Classificado**\n\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
 
             components:
               criarComponentesResultado(
                 numero,
-                resultadoExistente
+                resultadoExistente,
+                chave.participantes
               ),
 
             ephemeral: true
@@ -1735,12 +1731,19 @@ client.on(
 
           await interaction.update({
             content:
-              `✅ **CHAVE ${numero} ENCERRADA!**\n\n` +
-              `🥇 <@${ids[0]}> — **+5 pts**\n` +
-              `🥈 <@${ids[1]}> — **+3 pts**\n` +
-              `✅ <@${ids[2]}> — **+1 pt**\n` +
-              `✅ <@${ids[3]}> — **+1 pt**\n\n` +
-              `📊 **Ranking recalculado com sucesso.**`,
+              `╭━━━━〔 🏆 RESULTADO OFICIAL 〕━━━━╮\n\n` +
+              `☀️ **CHAVE #${numero}**\n\n` +
+              `🥇 <@${ids[0]}>\n` +
+              `🥈 <@${ids[1]}>\n\n` +
+              `✅ <@${ids[2]}>\n` +
+              `✅ <@${ids[3]}>\n\n` +
+              `━━━━━━━━━━━━━━━━━━━━\n\n` +
+              `📊 **PONTUAÇÃO REGISTRADA**\n\n` +
+              `🥇 Campeão ........ **+5**\n` +
+              `🥈 Vice ........... **+3**\n` +
+              `✅ Classificado ... **+1**\n` +
+              `✅ Classificado ... **+1**\n\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
 
             components: []
           });
@@ -1832,7 +1835,7 @@ client.on(
             ephemeral: true
           })
           .catch(() => {});
-      }
+   }
     }
   }
 );
