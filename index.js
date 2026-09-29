@@ -9,7 +9,8 @@ const {
   ButtonBuilder,
   ButtonStyle,
   UserSelectMenuBuilder,
-  StringSelectMenuBuilder
+  StringSelectMenuBuilder,
+  EmbedBuilder
 } = require("discord.js");
 
 const fs = require("fs");
@@ -25,15 +26,51 @@ const client = new Client({
 const ADV_FILE = "./advs.json";
 const CHAVES_FILE = "./chaves.json";
 
-// Guarda resultados que ainda estão sendo preenchidos
 const resultadosPendentes = new Map();
-
-// Guarda criações de chave ainda não confirmadas
 const criacoesPendentes = new Map();
+const trocasPendentes = new Map();
 
-// =========================
+// ======================================================
+// CORES
+// ======================================================
+
+const COR_BDR = 0xff8d00;
+const COR_SUCESSO = 0x57f287;
+const COR_ERRO = 0xed4245;
+const COR_INFO = 0x5865f2;
+const COR_AVISO = 0xffcc00;
+
+// ======================================================
+// EMBEDS
+// ======================================================
+
+function embedBase(titulo, cor = COR_BDR) {
+  return new EmbedBuilder()
+    .setColor(cor)
+    .setTitle(titulo)
+    .setFooter({
+      text: "☀️ Batalha do Repente"
+    })
+    .setTimestamp();
+}
+
+function embedAdv(titulo, campos, cor = COR_BDR) {
+  const embed = embedBase(titulo, cor);
+
+  for (const campo of campos) {
+    embed.addFields({
+      name: campo.nome,
+      value: campo.valor,
+      inline: campo.inline ?? false
+    });
+  }
+
+  return embed;
+}
+
+// ======================================================
 // ARQUIVOS
-// =========================
+// ======================================================
 
 function carregarArquivo(arquivo, padrao) {
   try {
@@ -61,7 +98,6 @@ function carregarArquivo(arquivo, padrao) {
     }
 
     return JSON.parse(conteudo);
-
   } catch (erro) {
     console.error(
       `Erro ao carregar ${arquivo}:`,
@@ -79,9 +115,9 @@ function salvarArquivo(arquivo, dados) {
   );
 }
 
-// =========================
+// ======================================================
 // ADVS
-// =========================
+// ======================================================
 
 function carregarAdvs() {
   return carregarArquivo(
@@ -97,22 +133,44 @@ function salvarAdvs(dados) {
   );
 }
 
-// =========================
+// ======================================================
 // CHAVES
-// =========================
+// ======================================================
 
 function carregarChaves() {
-  return carregarArquivo(
+  const dados = carregarArquivo(
     CHAVES_FILE,
     {
       mesAtual: null,
       proximaChave: 1,
       chaves: [],
       ranking: {},
-      organizadores: {},
+      organizacao: {},
       historicoMeses: []
     }
   );
+
+  if (!dados.chaves) {
+    dados.chaves = [];
+  }
+
+  if (!dados.ranking) {
+    dados.ranking = {};
+  }
+
+  if (!dados.organizacao) {
+    dados.organizacao = {};
+  }
+
+  if (!dados.historicoMeses) {
+    dados.historicoMeses = [];
+  }
+
+  if (!dados.proximaChave) {
+    dados.proximaChave = 1;
+  }
+
+  return dados;
 }
 
 function salvarChaves(dados) {
@@ -122,9 +180,9 @@ function salvarChaves(dados) {
   );
 }
 
-// =========================
+// ======================================================
 // MESES
-// =========================
+// ======================================================
 
 function mesAtual() {
   const agora = new Date();
@@ -171,51 +229,23 @@ function garantirMesAtual() {
   if (!dados.mesAtual) {
     dados.mesAtual = mes;
 
-    if (!dados.ranking) {
-      dados.ranking = {};
-    }
-
-    if (!dados.organizadores) {
-      dados.organizadores = {};
-    }
-
-    if (!dados.historicoMeses) {
-      dados.historicoMeses = [];
-    }
-
     salvarChaves(dados);
 
     return dados;
-  }
-
-  if (!dados.ranking) {
-    dados.ranking = {};
-  }
-
-  if (!dados.organizadores) {
-    dados.organizadores = {};
-  }
-
-  if (!dados.historicoMeses) {
-    dados.historicoMeses = [];
-  }
-
-  if (!dados.chaves) {
-    dados.chaves = [];
   }
 
   if (dados.mesAtual !== mes) {
     dados.historicoMeses.push({
       mes: dados.mesAtual,
       ranking: dados.ranking,
-      organizadores: dados.organizadores,
+      organizacao: dados.organizacao,
       encerradoEm:
         new Date().toISOString()
     });
 
     dados.mesAtual = mes;
     dados.ranking = {};
-    dados.organizadores = {};
+    dados.organizacao = {};
 
     salvarChaves(dados);
   }
@@ -223,9 +253,9 @@ function garantirMesAtual() {
   return dados;
 }
 
-// =========================
-// CARGOS DE ADV
-// =========================
+// ======================================================
+// CARGOS ADV
+// ======================================================
 
 async function pegarOuCriarCargo(
   guild,
@@ -311,15 +341,15 @@ async function aplicarCargo(
     });
 }
 
-// =========================
+// ======================================================
 // COMANDOS
-// =========================
+// ======================================================
 
 const comandos = [
 
-  // =========================
+  // ====================================================
   // ADV
-  // =========================
+  // ====================================================
 
   new SlashCommandBuilder()
     .setName("adv")
@@ -393,9 +423,9 @@ const comandos = [
       PermissionFlagsBits.ManageMessages
     ),
 
-  // =========================
+  // ====================================================
   // CHAVES
-  // =========================
+  // ====================================================
 
   new SlashCommandBuilder()
     .setName("chavesbdr")
@@ -431,20 +461,6 @@ const comandos = [
     ),
 
   new SlashCommandBuilder()
-    .setName("perfil")
-    .setDescription(
-      "Mostra o perfil de Chaves BDR de um MC."
-    )
-    .addUserOption(option =>
-      option
-        .setName("membro")
-        .setDescription(
-          "MC que deseja consultar."
-        )
-        .setRequired(false)
-    ),
-
-  new SlashCommandBuilder()
     .setName("editrankingchaves")
     .setDescription(
       "Edita o resultado de uma chave."
@@ -462,6 +478,20 @@ const comandos = [
     ),
 
   new SlashCommandBuilder()
+    .setName("perfil")
+    .setDescription(
+      "Mostra o perfil de um MC nas Chaves BDR."
+    )
+    .addUserOption(option =>
+      option
+        .setName("membro")
+        .setDescription(
+          "MC que deseja consultar."
+        )
+        .setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
     .setName("limparranking")
     .setDescription(
       "Encerra o ranking atual e inicia um novo."
@@ -474,9 +504,9 @@ const comandos = [
   comando.toJSON()
 );
 
-// =========================
+// ======================================================
 // REGISTRAR COMANDOS
-// =========================
+// ======================================================
 
 async function registrarComandos() {
   const rest = new REST({
@@ -501,7 +531,6 @@ async function registrarComandos() {
     console.log(
       "Comandos registrados."
     );
-
   } catch (erro) {
     console.error(
       "Erro ao registrar comandos:",
@@ -510,9 +539,9 @@ async function registrarComandos() {
   }
 }
 
-// =========================
+// ======================================================
 // CONFRONTOS
-// =========================
+// ======================================================
 
 function criarConfrontos(ids) {
   const embaralhados = [
@@ -557,16 +586,16 @@ function criarConfrontos(ids) {
   return confrontos;
 }
 
-// =========================
+// ======================================================
 // RANKING
-// =========================
+// ======================================================
 
 function recalcularRanking(
   dados,
   mes
 ) {
   const ranking = {};
-  const organizadores = {};
+  const organizacao = {};
 
   for (const chave of dados.chaves) {
 
@@ -599,143 +628,76 @@ function recalcularRanking(
       ranking[id] += pontos;
     };
 
+    // Campeão
     adicionar(
       resultado.campeao,
       5
     );
 
+    // Vice
     adicionar(
       resultado.vice,
       3
     );
 
-    adicionar(
-      resultado.passou1,
-      1
-    );
-
-    adicionar(
-      resultado.passou2,
-      1
-    );
-
-    // =========================
-    // ORGANIZADOR
-    // =========================
-
-    if (chave.encerradaPor) {
-
-      if (
-        !organizadores[
-          chave.encerradaPor
-        ]
+    // Classificados
+    if (
+      Array.isArray(
+        resultado.classificados
+      )
+    ) {
+      for (
+        const id of
+        resultado.classificados
       ) {
-        organizadores[
-          chave.encerradaPor
-        ] = 0;
+        adicionar(
+          id,
+          1
+        );
+      }
+    } else {
+      // Compatibilidade com sistema antigo
+      adicionar(
+        resultado.passou1,
+        1
+      );
+
+      adicionar(
+        resultado.passou2,
+        1
+      );
+    }
+
+    // ==================================================
+    // ORGANIZAÇÃO
+    // ==================================================
+
+    const organizador =
+      chave.criadaPor;
+
+    if (organizador) {
+      if (!organizacao[organizador]) {
+        organizacao[organizador] = 0;
       }
 
-      organizadores[
-        chave.encerradaPor
-      ] += 2;
+      organizacao[organizador] += 2;
     }
   }
 
   dados.ranking =
     ranking;
 
-  dados.organizadores =
-    organizadores;
+  dados.organizacao =
+    organizacao;
 
-  salvarChaves(dados);
+  salvarChaves(
+    dados
+  );
 }
 
-// =========================
-// FUNÇÕES DE PERFIL
-// =========================
-
-function obterEstatisticasPerfil(
-  dados,
-  userId
-) {
-  let titulos = 0;
-  let pontuacao = 0;
-  let participacoes = 0;
-
-  for (const chave of dados.chaves) {
-
-    if (
-      !chave.fechada ||
-      !chave.resultado
-    ) {
-      continue;
-    }
-
-    if (
-      !chave.participantes.includes(
-        userId
-      )
-    ) {
-      continue;
-    }
-
-    participacoes++;
-
-    const resultado =
-      chave.resultado;
-
-    if (
-      resultado.campeao ===
-      userId
-    ) {
-      titulos++;
-      pontuacao += 5;
-
-    } else if (
-      resultado.vice ===
-      userId
-    ) {
-      pontuacao += 3;
-
-    } else if (
-      resultado.passou1 ===
-      userId ||
-      resultado.passou2 ===
-      userId
-    ) {
-      pontuacao += 1;
-    }
-  }
-
-  const ranking =
-    Object.entries(
-      dados.ranking || {}
-    )
-      .sort(
-        (a, b) =>
-          b[1] - a[1]
-      );
-
-  const posicao =
-    ranking.findIndex(
-      ([id]) =>
-        id === userId
-    );
-
-  return {
-    titulos,
-    pontuacao,
-    participacoes,
-    posicao:
-      posicao === -1
-        ? null
-        : posicao + 1
-  };
-}
-
-// =========================
+// ======================================================
 // MENUS DE RESULTADO
-// =========================
+// ======================================================
 
 function criarMenuResultado(
   numero,
@@ -759,12 +721,10 @@ function criarMenuResultado(
           (id, index) => ({
             label:
               `MC ${index + 1}`,
-
             description:
-              `Selecionar <@${id}>`,
-
-            value: id,
-
+              `Selecionar ${id}`,
+            value:
+              id,
             default:
               selecionado === id
           })
@@ -772,7 +732,9 @@ function criarMenuResultado(
       );
 
   return new ActionRowBuilder()
-    .addComponents(menu);
+    .addComponents(
+      menu
+    );
 }
 
 function criarComponentesResultado(
@@ -780,46 +742,86 @@ function criarComponentesResultado(
   resultado,
   participantes
 ) {
-  const componentes = [
+  const componentes = [];
 
+  // ==================================================
+  // CAMPEÃO
+  // ==================================================
+
+  componentes.push(
     criarMenuResultado(
       numero,
       "campeao",
       "🥇 Selecionar campeão",
       resultado.campeao,
       participantes
-    ),
+    )
+  );
 
+  // ==================================================
+  // VICE
+  // ==================================================
+
+  componentes.push(
     criarMenuResultado(
       numero,
       "vice",
       "🥈 Selecionar vice-campeão",
       resultado.vice,
       participantes
-    ),
-
-    criarMenuResultado(
-      numero,
-      "passou1",
-      "✅ Selecionar classificado",
-      resultado.passou1,
-      participantes
-    ),
-
-    criarMenuResultado(
-      numero,
-      "passou2",
-      "✅ Selecionar outro classificado",
-      resultado.passou2,
-      participantes
     )
-  ];
+  );
+
+  // ==================================================
+  // CLASSIFICADOS
+  // ==================================================
+
+  const quantidadeClassificados =
+    participantes.length === 8
+      ? 4
+      : 2;
+
+  const classificados =
+    Array.isArray(
+      resultado.classificados
+    )
+      ? resultado.classificados
+      : [
+          resultado.passou1,
+          resultado.passou2
+        ].filter(Boolean);
+
+  for (
+    let i = 0;
+    i < quantidadeClassificados;
+    i++
+  ) {
+    componentes.push(
+      criarMenuResultado(
+        numero,
+        `classificado${i}`,
+        `✅ Classificado ${i + 1}`,
+        classificados[i] || null,
+        participantes
+      )
+    );
+  }
+
+  // ==================================================
+  // CONFIRMAR
+  // ==================================================
+
+  const ids =
+    [
+      resultado.campeao,
+      resultado.vice,
+      ...classificados
+    ];
 
   const preenchido =
-    resultado.campeao &&
-    resultado.vice &&
-    resultado.passou1 &&
-    resultado.passou2;
+    ids.length ===
+      2 + quantidadeClassificados &&
+    ids.every(Boolean);
 
   componentes.push(
     new ActionRowBuilder()
@@ -831,6 +833,7 @@ function criarComponentesResultado(
           .setLabel(
             "Confirmar resultado"
           )
+          .setEmoji("🏆")
           .setStyle(
             ButtonStyle.Success
           )
@@ -843,81 +846,30 @@ function criarComponentesResultado(
   return componentes;
 }
 
-// =========================
+// ======================================================
 // TEXTO PARTICIPANTES
-// =========================
+// ======================================================
 
 function textoParticipantes(ids) {
-  return ids.length
-    ? ids
-        .map(
-          (id, i) =>
-            `**${i + 1}.** <@${id}>`
-        )
-        .join("\n")
-    : "⏳ Nenhum MC selecionado.";
-}
-
-// =========================
-// TEXTO RANKING
-// =========================
-
-function textoRanking(
-  dados
-) {
-  const ranking =
-    Object.entries(
-      dados.ranking || {}
-    ).sort(
-      (a, b) =>
-        b[1] - a[1]
-    );
-
-  if (
-    ranking.length === 0
-  ) {
-    return (
-      `╭━━━━━━〔 ☀️ RANKING CHAVES BDR 〕━━━━━━╮\n` +
-      `          ${nomeMes(dados.mesAtual).toUpperCase()} / ${dados.mesAtual.split("-")[0]}\n` +
-      `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
-      `📊 Ainda não existem pontos neste mês.`
-    );
+  if (!ids.length) {
+    return "⏳ Nenhum MC selecionado.";
   }
 
-  let texto =
-    `╭━━━━━━〔 ☀️ RANKING CHAVES BDR 〕━━━━━━╮\n` +
-    `          ${nomeMes(dados.mesAtual).toUpperCase()} / ${dados.mesAtual.split("-")[0]}\n` +
-    `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯\n\n`;
-
-  ranking.forEach(
-    ([id, pontos], index) => {
-
-      let medalha = "";
-
-      if (index === 0) {
-        medalha = "🥇 ";
-      } else if (index === 1) {
-        medalha = "🥈 ";
-      } else if (index === 2) {
-        medalha = "🥉 ";
-      }
-
-      texto +=
-        `${medalha}**${index + 1}º** <@${id}> — **${pontos} pts**\n`;
-    }
-  );
-
-  return texto;
+  return ids
+    .map(
+      (id, i) =>
+        `**${i + 1}.** <@${id}>`
+    )
+    .join("\n");
 }
 
-// =========================
+// ======================================================
 // BOT ONLINE
-// =========================
+// ======================================================
 
 client.once(
   "ready",
   async () => {
-
     console.log(
       `Bot online como ${client.user.tag}`
     );
@@ -928,9 +880,9 @@ client.once(
   }
 );
 
-// =========================
+// ======================================================
 // INTERAÇÕES
-// =========================
+// ======================================================
 
 client.on(
   "interactionCreate",
@@ -938,17 +890,17 @@ client.on(
 
     try {
 
-      // =====================================
-      // COMANDOS SLASH
-      // =====================================
+      // ==================================================
+      // SLASH COMMANDS
+      // ==================================================
 
       if (
         interaction.isChatInputCommand()
       ) {
 
-        // =========================
-        // /ADV
-        // =========================
+        // ================================================
+        // ADV
+        // ================================================
 
         if (
           interaction.commandName ===
@@ -972,8 +924,14 @@ client.on(
 
           if (!membro) {
             return interaction.reply({
-              content:
-                "❌ Não encontrei esse membro no servidor.",
+              embeds: [
+                embedBase(
+                  "❌ MEMBRO NÃO ENCONTRADO",
+                  COR_ERRO
+                ).setDescription(
+                  "Não encontrei esse membro no servidor."
+                )
+              ],
               ephemeral: true
             });
           }
@@ -983,8 +941,14 @@ client.on(
             interaction.user.id
           ) {
             return interaction.reply({
-              content:
-                "❌ Você não pode aplicar ADV em si mesmo.",
+              embeds: [
+                embedBase(
+                  "❌ AÇÃO NÃO PERMITIDA",
+                  COR_ERRO
+                ).setDescription(
+                  "Você não pode aplicar ADV em si mesmo."
+                )
+              ],
               ephemeral: true
             });
           }
@@ -1007,7 +971,8 @@ client.on(
           const advertencia = {
             id:
               dados[membro.id]
-                .historico.length + 1,
+                .historico
+                .length + 1,
 
             numero,
 
@@ -1033,11 +998,29 @@ client.on(
             );
           }
 
-          let resposta =
-            `⚠️ **ADVERTÊNCIA APLICADA**\n\n` +
-            `👤 Membro: <@${usuario.id}>\n` +
-            `📌 ADV: **${numero}**\n` +
-            `📝 Motivo: **${motivo}**`;
+          const campos = [
+            {
+              nome: "👤 Membro",
+              valor:
+                `<@${usuario.id}>`
+            },
+            {
+              nome: "📌 ADV",
+              valor:
+                `**${numero}**`
+            },
+            {
+              nome: "📝 Motivo",
+              valor:
+                `**${motivo}**`
+            }
+          ];
+
+          let embed =
+            embedAdv(
+              "⚠️ ADVERTÊNCIA APLICADA",
+              campos
+            );
 
           if (numero === 2) {
 
@@ -1048,17 +1031,12 @@ client.on(
               )
               .catch(() => {});
 
-            resposta +=
-              `\n\n⏱️ **Punição:** Timeout de 1 hora.`;
-
-            setTimeout(
-              async () => {
-                await membro
-                  .timeout(null)
-                  .catch(() => {});
-              },
-              60 * 60 * 1000
-            );
+            embed.addFields({
+              name:
+                "⏱️ Punição",
+              value:
+                "**Timeout de 1 hora.**"
+            });
           }
 
           if (numero === 3) {
@@ -1073,26 +1051,42 @@ client.on(
               )
               .catch(() => {});
 
-            resposta +=
-              `\n\n⏱️ **Punição:** Timeout de 1 dia.`;
+            embed.addFields({
+              name:
+                "⏱️ Punição",
+              value:
+                "**Timeout de 1 hora.**"
+            });
+          }
 
-            setTimeout(
-              async () => {
-                await membro
-                  .timeout(null)
-                  .catch(() => {});
-              },
-              24 *
-                60 *
-                60 *
-                1000
-            );
+          if (numero === 3) {
+
+            await membro
+              .timeout(
+                24 *
+                  60 *
+                  60 *
+                  1000,
+                `ADV 3: ${motivo}`
+              )
+              .catch(() => {});
+
+            embed.addFields({
+              name:
+                "⏱️ Punição",
+              value:
+                "**Timeout de 1 dia.**"
+            });
           }
 
           if (numero === 4) {
 
-            resposta +=
-              `\n\n🚪 **Punição:** Membro expulso do servidor.`;
+            embed.addFields({
+              name:
+                "🚪 Punição",
+              value:
+                "**Membro expulso do servidor.**"
+            });
 
             await membro
               .kick(
@@ -1102,21 +1096,26 @@ client.on(
           }
 
           if (numero > 4) {
-
-            resposta +=
-              `\n\n⚠️ O membro já ultrapassou o limite de 4 ADVs.`;
+            embed.addFields({
+              name:
+                "⚠️ Observação",
+              value:
+                "**O membro já ultrapassou o limite de 4 ADVs.**"
+            });
           }
 
           await interaction.reply({
-            content: resposta
+            embeds: [
+              embed
+            ]
           });
 
           return;
         }
 
-        // =========================
-        // /ADVLIST
-        // =========================
+        // ================================================
+        // ADVLIST
+        // ================================================
 
         if (
           interaction.commandName ===
@@ -1127,6 +1126,7 @@ client.on(
             interaction.options.getUser(
               "membro"
             );
+
           const dados =
             carregarAdvs();
 
@@ -1138,38 +1138,52 @@ client.on(
             registro.historico.length ===
               0
           ) {
-
             return interaction.reply({
-              content:
-                `✅ <@${usuario.id}> não possui advertências registradas.`,
+              embeds: [
+                embedBase(
+                  "✅ NENHUMA ADVERTÊNCIA",
+                  COR_SUCESSO
+                ).setDescription(
+                  `<@${usuario.id}> não possui advertências registradas.`
+                )
+              ],
               ephemeral: true
             });
           }
 
-          let texto =
-            `⚠️ **ADVERTÊNCIAS DE <@${usuario.id}>**\n\n`;
+          const embed =
+            embedBase(
+              `⚠️ ADVERTÊNCIAS DE ${usuario.username}`
+            );
+
+          let descricao = "";
 
           for (
             const adv of
             registro.historico
           ) {
-
-            texto +=
+            descricao +=
               `**ADV ${adv.numero}** — ID ${adv.id}\n` +
               `📝 ${adv.motivo}\n` +
-              `👮 Aplicada por: <@${adv.aplicadoPor}>\n\n`;
+              `👮 <@${adv.aplicadoPor}>\n\n`;
           }
 
+          embed.setDescription(
+            descricao
+          );
+
           await interaction.reply({
-            content: texto
+            embeds: [
+              embed
+            ]
           });
 
           return;
         }
 
-        // =========================
-        // /ADVREMOVE
-        // =========================
+        // ================================================
+        // ADVREMOVE
+        // ================================================
 
         if (
           interaction.commandName ===
@@ -1190,10 +1204,15 @@ client.on(
             carregarAdvs();
 
           if (!dados[usuario.id]) {
-
             return interaction.reply({
-              content:
-                "❌ Esse membro não possui ADVs.",
+              embeds: [
+                embedBase(
+                  "❌ ADV NÃO ENCONTRADA",
+                  COR_ERRO
+                ).setDescription(
+                  "Esse membro não possui ADVs."
+                )
+              ],
               ephemeral: true
             });
           }
@@ -1207,31 +1226,47 @@ client.on(
               );
 
           if (indice === -1) {
-
             return interaction.reply({
-              content:
-                "❌ ADV não encontrada.",
+              embeds: [
+                embedBase(
+                  "❌ ADV NÃO ENCONTRADA",
+                  COR_ERRO
+                ).setDescription(
+                  `Não encontrei a ADV **${id}** desse membro.`
+                )
+              ],
               ephemeral: true
             });
           }
 
           dados[usuario.id]
             .historico
-            .splice(indice, 1);
+            .splice(
+              indice,
+              1
+            );
 
-          salvarAdvs(dados);
+          salvarAdvs(
+            dados
+          );
 
           await interaction.reply({
-            content:
-              `✅ ADV **${id}** de <@${usuario.id}> foi removida do histórico.`
+            embeds: [
+              embedBase(
+                "✅ ADV REMOVIDA",
+                COR_SUCESSO
+              ).setDescription(
+                `A ADV **${id}** de <@${usuario.id}> foi removida do histórico.`
+              )
+            ]
           });
 
           return;
         }
 
-        // =========================
-        // /ADVS
-        // =========================
+        // ================================================
+        // ADVS
+        // ================================================
 
         if (
           interaction.commandName ===
@@ -1274,38 +1309,50 @@ client.on(
             lista.slice(0, 10);
 
           if (
-            recentes.length === 0
+            recentes.length ===
+              0
           ) {
-
             return interaction.reply({
-              content:
-                "✅ Nenhuma advertência registrada."
+              embeds: [
+                embedBase(
+                  "✅ ADVERTÊNCIAS",
+                  COR_SUCESSO
+                ).setDescription(
+                  "Nenhuma advertência registrada."
+                )
+              ]
             });
           }
 
-          let texto =
-            "⚠️ **ADVERTÊNCIAS RECENTES**\n\n";
+          let descricao = "";
 
           for (
             const adv of recentes
           ) {
 
-            texto +=
-              `👤 <@${adv.userId}> — **ADV ${adv.numero}**\n` +
+            descricao +=
+              `👤 <@${adv.userId}>\n` +
+              `📌 **ADV ${adv.numero}**\n` +
               `📝 ${adv.motivo}\n` +
               `👮 <@${adv.aplicadoPor}>\n\n`;
           }
 
           await interaction.reply({
-            content: texto
+            embeds: [
+              embedBase(
+                "⚠️ ADVERTÊNCIAS RECENTES"
+              ).setDescription(
+                descricao
+              )
+            ]
           });
 
           return;
         }
 
-        // =========================
-        // /CHAVESBDR
-        // =========================
+        // ================================================
+        // CHAVESBDR
+        // ================================================
 
         if (
           interaction.commandName ===
@@ -1324,9 +1371,7 @@ client.on(
             chaveDados,
             {
               tamanho,
-              participantes: [],
-              criador:
-                interaction.user.id
+              participantes: []
             }
           );
 
@@ -1353,25 +1398,27 @@ client.on(
               .setLabel(
                 "Criar chave"
               )
+              .setEmoji("☀️")
               .setStyle(
                 ButtonStyle.Success
               )
-              .setDisabled(
-                true
+              .setDisabled(true);
+
+          const embed =
+            embedBase(
+              "☀️ NOVA CHAVE BDR"
+            )
+              .setDescription(
+                `📊 **Tamanho:** ${tamanho} MCs\n\n` +
+                `Selecione os **${tamanho} MCs** que participarão da chave.\n\n` +
+                `👥 **Participantes selecionados:**\n` +
+                `⏳ Nenhum MC selecionado.`
               );
 
-          // =====================================
-          // AGORA É PÚBLICO
-          // =====================================
-
           await interaction.reply({
-            content:
-              `╭━━━━━━〔 ☀️ NOVA CHAVE BDR 〕━━━━━━╮\n\n` +
-              `📊 **Tamanho:** ${tamanho} MCs\n\n` +
-              `Selecione abaixo os **${tamanho} MCs** que participarão da chave.\n\n` +
-              `👥 **Participantes selecionados:**\n` +
-              `⏳ Nenhum MC selecionado.\n\n` +
-              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
+            embeds: [
+              embed
+            ],
             components: [
               new ActionRowBuilder()
                 .addComponents(
@@ -1387,9 +1434,9 @@ client.on(
           return;
         }
 
-        // =========================
-        // /RANKINGCHAVES
-        // =========================
+        // ================================================
+        // RANKING
+        // ================================================
 
         if (
           interaction.commandName ===
@@ -1404,17 +1451,71 @@ client.on(
             dados.mesAtual
           );
 
+          const ranking =
+            Object.entries(
+              dados.ranking
+            ).sort(
+              (a, b) =>
+                b[1] - a[1]
+            );
+
+          const embed =
+            embedBase(
+              `🏆 RANKING BDR — ${nomeMes(
+                dados.mesAtual
+              )}`
+            );
+
+          if (
+            ranking.length ===
+              0
+          ) {
+            embed.setDescription(
+              "Ainda não existem pontos neste mês."
+            );
+
+            return interaction.reply({
+              embeds: [
+                embed
+              ]
+            });
+          }
+
+          let descricao = "";
+
+          ranking.forEach(
+            ([id, pontos], index) => {
+
+              const medalha =
+                index === 0
+                  ? "🥇"
+                  : index === 1
+                  ? "🥈"
+                  : index === 2
+                  ? "🥉"
+                  : `**${index + 1}.**`;
+
+              descricao +=
+                `${medalha} <@${id}> — **${pontos} pts**\n`;
+            }
+          );
+
+          embed.setDescription(
+            descricao
+          );
+
           await interaction.reply({
-            content:
-              textoRanking(dados)
+            embeds: [
+              embed
+            ]
           });
 
           return;
         }
 
-        // =========================
-        // /PERFIL
-        // =========================
+        // ================================================
+        // PERFIL
+        // ================================================
 
         if (
           interaction.commandName ===
@@ -1435,37 +1536,110 @@ client.on(
             dados.mesAtual
           );
 
-          const estatisticas =
-            obterEstatisticasPerfil(
-              dados,
+          let pontos = 0;
+          let titulos = 0;
+          let participacoes = 0;
+
+          for (
+            const chave of
+            dados.chaves
+          ) {
+
+            if (
+              chave.mes !==
+              dados.mesAtual
+            ) {
+              continue;
+            }
+
+            if (
+              !chave.participantes.includes(
+                usuario.id
+              )
+            ) {
+              continue;
+            }
+
+            participacoes++;
+
+            if (
+              chave.resultado &&
+              chave.resultado.campeao ===
+                usuario.id
+            ) {
+              titulos++;
+            }
+          }
+
+          pontos =
+            dados.ranking[
               usuario.id
+            ] || 0;
+
+          const ranking =
+            Object.entries(
+              dados.ranking
+            ).sort(
+              (a, b) =>
+                b[1] - a[1]
             );
 
           const posicao =
-            estatisticas.posicao
-              ? `${estatisticas.posicao}º`
-              : "—";
+            ranking.findIndex(
+              ([id]) =>
+                id === usuario.id
+            ) + 1;
+
+          const embed =
+            embedBase(
+              `👤 PERFIL BDR — ${usuario.username}`
+            );
+
+          embed.addFields(
+            {
+              name:
+                "🏆 Títulos",
+              value:
+                `**${titulos}**`,
+              inline: true
+            },
+            {
+              name:
+                "📊 Pontuação",
+              value:
+                `**${pontos} pts**`,
+              inline: true
+            },
+            {
+              name:
+                "⚔️ Participações",
+              value:
+                `**${participacoes}**`,
+              inline: true
+            },
+            {
+              name:
+                "📍 Posição",
+              value:
+                posicao > 0
+                  ? `**#${posicao}**`
+                  : "**Sem posição**",
+              inline: true
+            }
+          );
 
           await interaction.reply({
-            content:
-              `╭━━━━━━〔 ☀️ PERFIL BDR 〕━━━━━━╮\n\n` +
-              `👤 <@${usuario.id}>\n\n` +
-              `⚔️ **CHAVES BDR**\n\n` +
-              `🏆 Títulos ........ **${estatisticas.titulos}**\n` +
-              `📊 Pontuação ...... **${estatisticas.pontuacao} pts**\n` +
-              `👥 Participações .. **${estatisticas.participacoes}**\n\n` +
-              `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-              `📈 **Posição no ranking**\n` +
-              `🏅 **#${posicao}**\n\n` +
-              `╰━━━━━━━━━━━━━━━━━━━━━━━━╯`
+            embeds: [
+              embed
+            ]
           });
 
           return;
         }
 
-        // =========================
-        // /EDITRANKINGCHAVES
-        // =========================
+        // ================================================
+        // EDITAR RANKING
+        // ================================================
 
         if (
           interaction.commandName ===
@@ -1490,22 +1664,39 @@ client.on(
             );
 
           if (!chave) {
-
             return interaction.reply({
-              content:
-                "❌ Chave não encontrada neste mês.",
+              embeds: [
+                embedBase(
+                  "❌ CHAVE NÃO ENCONTRADA",
+                  COR_ERRO
+                ).setDescription(
+                  `Não encontrei a Chave **#${numero}** neste mês.`
+                )
+              ],
               ephemeral: true
             });
           }
 
           if (!chave.resultado) {
-
             return interaction.reply({
-              content:
-                "❌ Essa chave ainda não possui resultado.",
+              embeds: [
+                embedBase(
+                  "❌ SEM RESULTADO",
+                  COR_ERRO
+                ).setDescription(
+                  "Essa chave ainda não possui resultado."
+                )
+              ],
               ephemeral: true
             });
           }
+
+          const classificados =
+            chave.resultado.classificados ||
+            [
+              chave.resultado.passou1,
+              chave.resultado.passou2
+            ].filter(Boolean);
 
           const resultado = {
             campeao:
@@ -1514,50 +1705,42 @@ client.on(
             vice:
               chave.resultado.vice,
 
-            passou1:
-              chave.resultado.passou1,
-
-            passou2:
-              chave.resultado.passou2
+            classificados: [
+              ...classificados
+            ]
           };
 
-          const chaveDados =
-            `${interaction.user.id}_${numero}`;
-
           resultadosPendentes.set(
-            chaveDados,
-            {
-              ...resultado,
-              chaveNumero:
-                numero,
-              dono:
-                interaction.user.id
-            }
+            `${interaction.user.id}_${numero}`,
+            resultado
           );
 
-          await interaction.reply({
-            content:
-              `╭━━━━〔 ✏️ EDITAR CHAVE #${numero} 〕━━━━╮\n\n` +
-              `Selecione novamente o resultado abaixo.\n\n` +
-              `⚠️ Ao confirmar, o ranking será recalculado automaticamente.\n\n` +
-              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
+          const embed =
+            embedBase(
+              `✏️ EDITAR RESULTADO — CHAVE #${numero}`
+            ).setDescription(
+              "Selecione novamente os resultados da chave abaixo."
+            );
 
+          await interaction.reply({
+            embeds: [
+              embed
+            ],
             components:
               criarComponentesResultado(
                 numero,
                 resultado,
                 chave.participantes
               ),
-
             ephemeral: true
           });
 
           return;
         }
 
-        // =========================
-        // /LIMPARRANKING
-        // =========================
+        // ================================================
+        // LIMPAR RANKING
+        // ================================================
 
         if (
           interaction.commandName ===
@@ -1575,6 +1758,7 @@ client.on(
                   .setLabel(
                     "Confirmar"
                   )
+                  .setEmoji("🧹")
                   .setStyle(
                     ButtonStyle.Danger
                   ),
@@ -1592,14 +1776,18 @@ client.on(
               );
 
           await interaction.reply({
-            content:
-              "⚠️ **Tem certeza que deseja encerrar o ranking atual?**\n\n" +
-              "O ranking será arquivado e um novo ranking será iniciado.",
-
+            embeds: [
+              embedBase(
+                "⚠️ ENCERRAR RANKING",
+                COR_AVISO
+              ).setDescription(
+                "Tem certeza que deseja encerrar o ranking atual?\n\n" +
+                "O ranking será arquivado e um novo ranking será iniciado."
+              )
+            ],
             components: [
               row
             ],
-
             ephemeral: true
           });
 
@@ -1607,9 +1795,9 @@ client.on(
         }
       }
 
-      // =====================================
+      // ==================================================
       // SELECT MENUS
-      // =====================================
+      // ==================================================
 
       if (
         interaction.isUserSelectMenu() ||
@@ -1621,9 +1809,9 @@ client.on(
             "_"
           );
 
-        // =========================
-        // SELEÇÃO DOS MCs DA CHAVE
-        // =========================
+        // ==================================================
+        // SELEÇÃO DE MCs DA CHAVE
+        // ==================================================
 
         if (
           partes[0] === "criar" &&
@@ -1642,35 +1830,22 @@ client.on(
             );
 
           if (!pendente) {
-
             return interaction.reply({
-              content:
-                "❌ Esta criação de chave expirou. Use `/chavesbdr` novamente.",
-              ephemeral: true
-            });
-          }
-
-          // =====================================
-          // SOMENTE QUEM CRIOU PODE EDITAR
-          // =====================================
-
-          if (
-            interaction.user.id !==
-            pendente.criador
-          ) {
-
-            return interaction.reply({
-              content:
-                "❌ Apenas o organizador que iniciou esta chave pode selecionar os MCs.",
+              embeds: [
+                embedBase(
+                  "❌ CRIAÇÃO EXPIRADA",
+                  COR_ERRO
+                ).setDescription(
+                  "Esta criação de chave expirou. Use `/chavesbdr` novamente."
+                )
+              ],
               ephemeral: true
             });
           }
 
           pendente.participantes =
             [
-              ...new Set(
-                interaction.values
-              )
+              ...interaction.values
             ];
 
           const seletor =
@@ -1696,6 +1871,7 @@ client.on(
               .setLabel(
                 "Criar chave"
               )
+              .setEmoji("☀️")
               .setStyle(
                 ButtonStyle.Success
               )
@@ -1704,22 +1880,26 @@ client.on(
                   pendente.tamanho
               );
 
-          await interaction.update({
-            content:
-              `╭━━━━━━〔 ☀️ NOVA CHAVE BDR 〕━━━━━━╮\n\n` +
+          const embed =
+            embedBase(
+              "☀️ NOVA CHAVE BDR"
+            ).setDescription(
               `📊 **Tamanho:** ${pendente.tamanho} MCs\n\n` +
               `👥 **Participantes selecionados:**\n` +
               `${textoParticipantes(
                 pendente.participantes
-              )}\n\n` +
-              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
+              )}`
+            );
 
+          await interaction.update({
+            embeds: [
+              embed
+            ],
             components: [
               new ActionRowBuilder()
                 .addComponents(
                   seletor
                 ),
-
               new ActionRowBuilder()
                 .addComponents(
                   confirmar
@@ -1730,13 +1910,13 @@ client.on(
           return;
         }
 
-        // =========================
+        // ==================================================
         // RESULTADO
-        // =========================
+        // ==================================================
 
         if (
           partes[0] ===
-            "resultado" &&
+          "resultado" &&
           partes[1] ===
             "select"
         ) {
@@ -1747,7 +1927,64 @@ client.on(
             );
 
           const campo =
-            partes[3];
+            partes
+              .slice(3)
+              .join("");
+
+          const chaveDados =
+            `${interaction.user.id}_${numero}`;
+
+          let resultado =
+            resultadosPendentes.get(
+              chaveDados
+            );
+
+          if (!resultado) {
+            resultado = {
+              campeao: null,
+              vice: null,
+              classificados: []
+            };
+          }
+
+          if (
+            campo.startsWith(
+              "classificado"
+            )
+          ) {
+
+            const indice =
+              Number(
+                campo.replace(
+                  "classificado",
+                  ""
+                )
+              );
+
+            if (
+              !Array.isArray(
+                resultado.classificados
+              )
+            ) {
+              resultado.classificados =
+                [];
+            }
+
+            resultado.classificados[
+              indice
+            ] =
+              interaction.values[0];
+
+          } else {
+
+            resultado[campo] =
+              interaction.values[0];
+          }
+
+          resultadosPendentes.set(
+            chaveDados,
+            resultado
+          );
 
           const dados =
             garantirMesAtual();
@@ -1762,105 +1999,54 @@ client.on(
             );
 
           if (!chave) {
-
             return interaction.reply({
-              content:
-                "❌ Chave não encontrada.",
+              embeds: [
+                embedBase(
+                  "❌ CHAVE NÃO ENCONTRADA",
+                  COR_ERRO
+                )
+              ],
               ephemeral: true
             });
           }
 
-          // =====================================
-          // IDENTIFICAR DONO DO FLUXO
-          // =====================================
+          const classificados =
+            resultado.classificados ||
+            [];
 
-          const chaveDados =
-            `${interaction.user.id}_${numero}`;
-
-          let resultado =
-            resultadosPendentes.get(
-              chaveDados
-            );
-
-          // Caso seja uma edição, procurar
-          // qualquer resultado pendente do usuário
-          if (!resultado) {
-
-            for (
-              const [
-                chavePendente,
-                valor
-              ] of resultadosPendentes
-            ) {
-
-              if (
-                valor &&
-                valor.chaveNumero ===
-                  numero &&
-                valor.dono ===
-                  interaction.user.id
-              ) {
-                resultado = valor;
-                break;
-              }
-            }
-          }
-
-          if (!resultado) {
-
-            return interaction.reply({
-              content:
-                "❌ Este resultado não pertence a você ou expirou.",
-              ephemeral: true
-            });
-          }
-
-          if (
-            !chave.participantes.includes(
-              interaction.values[0]
-            )
-          ) {
-
-            return interaction.reply({
-              content:
-                "❌ Esse MC não participa desta chave.",
-              ephemeral: true
-            });
-          }
-
-          resultado[campo] =
-            interaction.values[0];
-
-          resultadosPendentes.set(
-            chaveDados,
-            resultado
-          );
-
-          await interaction.update({
-            content:
-              `╭━━━━〔 🏆 RESULTADO DA CHAVE #${numero} 〕━━━━╮\n\n` +
+          const embed =
+            embedBase(
+              `🏆 RESULTADO DA CHAVE #${numero}`
+            ).setDescription(
               `🥇 **Campeão:** ${
                 resultado.campeao
                   ? `<@${resultado.campeao}>`
-                  : "⏳ não selecionado"
-              }\n` +
+                  : "⏳ Não selecionado"
+              }\n\n` +
+
               `🥈 **Vice:** ${
                 resultado.vice
                   ? `<@${resultado.vice}>`
-                  : "⏳ não selecionado"
-              }\n` +
-              `✅ **Classificado:** ${
-                resultado.passou1
-                  ? `<@${resultado.passou1}>`
-                  : "⏳ não selecionado"
-              }\n` +
-              `✅ **Classificado:** ${
-                resultado.passou2
-                  ? `<@${resultado.passou2}>`
-                  : "⏳ não selecionado"
+                  : "⏳ Não selecionado"
               }\n\n` +
-              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
 
+              `✅ **Classificados:**\n` +
+              (
+                classificados.length
+                  ? classificados
+                      .map(
+                        id =>
+                          `<@${id}>`
+                      )
+                      .join("\n")
+                  : "⏳ Nenhum selecionado"
+              )
+            );
+
+          await interaction.update({
+            embeds: [
+              embed
+            ],
             components:
               criarComponentesResultado(
                 numero,
@@ -1871,19 +2057,147 @@ client.on(
 
           return;
         }
+
+        // ==================================================
+        // TROCAR MC
+        // ==================================================
+
+        if (
+          partes[0] ===
+            "trocar" &&
+          partes[1] ===
+            "mc" &&
+          partes[2] ===
+            "selecionar"
+        ) {
+
+          const numero =
+            Number(
+              partes[3]
+            );
+
+          const tipo =
+            partes[4];
+
+          const chaveDados =
+            `${interaction.user.id}_${numero}`;
+
+          const pendente =
+            trocasPendentes.get(
+              chaveDados
+            );
+
+          if (!pendente) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ TROCA EXPIRADA",
+                  COR_ERRO
+                ).setDescription(
+                  "Abra novamente o botão **Trocar MC**."
+                )
+              ],
+              ephemeral: true
+            });
+          }
+
+          if (
+            tipo ===
+              "antigo"
+          ) {
+            pendente.antigo =
+              interaction.values[0];
+          }
+
+          if (
+            tipo ===
+              "novo"
+          ) {
+            pendente.novo =
+              interaction.values[0];
+          }
+
+          trocasPendentes.set(
+            chaveDados,
+            pendente
+          );
+
+          const embed =
+            embedBase(
+              `🔄 TROCAR MC — CHAVE #${numero}`
+            ).setDescription(
+              `👤 **MC ausente:** ${
+                pendente.antigo
+                  ? `<@${pendente.antigo}>`
+                  : "⏳ Não selecionado"
+              }\n\n` +
+              `🆕 **Novo MC:** ${
+                pendente.novo
+                  ? `<@${pendente.novo}>`
+                  : "⏳ Não selecionado"
+              }`
+            );
+
+          const confirmar =
+            new ButtonBuilder()
+              .setCustomId(
+                `confirmar_troca_${numero}`
+              )
+              .setLabel(
+                "Confirmar troca"
+              )
+              .setEmoji("🔄")
+              .setStyle(
+                ButtonStyle.Success
+              )
+              .setDisabled(
+                !pendente.antigo ||
+                !pendente.novo
+              );
+
+          await interaction.update({
+            embeds: [
+              embed
+            ],
+            components: [
+              new ActionRowBuilder()
+                .addComponents(
+                  criarSeletorTrocaAntigo(
+                    numero,
+                    pendente.participantes,
+                    pendente.antigo
+                  )
+                ),
+              new ActionRowBuilder()
+                .addComponents(
+                  criarSeletorTrocaNovo(
+                    numero,
+                    pendente.participantes,
+                    pendente.novo
+                  )
+                ),
+              new ActionRowBuilder()
+                .addComponents(
+                  confirmar
+                )
+            ]
+          });
+
+          return;
+        }
       }
 
-      // =====================================
+      // ==================================================
       // BOTÕES
-      // =====================================
+      // ==================================================
 
       if (
         interaction.isButton()
       ) {
 
-        // =========================
+        // ==================================================
         // CONFIRMAR CRIAÇÃO
-        // =========================
+        // ==================================================
 
         if (
           interaction.customId.startsWith(
@@ -1903,22 +2217,15 @@ client.on(
             );
 
           if (!pendente) {
-
             return interaction.reply({
-              content:
-                "❌ Esta criação de chave expirou. Use `/chavesbdr` novamente.",
-              ephemeral: true
-            });
-          }
-
-          if (
-            interaction.user.id !==
-            pendente.criador
-          ) {
-
-            return interaction.reply({
-              content:
-                "❌ Apenas quem iniciou a criação pode confirmar a chave.",
+              embeds: [
+                embedBase(
+                  "❌ CRIAÇÃO EXPIRADA",
+                  COR_ERRO
+                ).setDescription(
+                  "Use `/chavesbdr` novamente."
+                )
+              ],
               ephemeral: true
             });
           }
@@ -1927,10 +2234,15 @@ client.on(
             pendente.participantes.length !==
             pendente.tamanho
           ) {
-
             return interaction.reply({
-              content:
-                `❌ Selecione exatamente **${pendente.tamanho} MCs** antes de criar a chave.`,
+              embeds: [
+                embedBase(
+                  "❌ PARTICIPANTES INCOMPLETOS",
+                  COR_ERRO
+                ).setDescription(
+                  `Selecione exatamente **${pendente.tamanho} MCs** antes de criar a chave.`
+                )
+              ],
               ephemeral: true
             });
           }
@@ -1943,30 +2255,22 @@ client.on(
 
           const chave = {
             numero,
-
             mes:
               dados.mesAtual,
-
             tamanho:
               pendente.tamanho,
-
             participantes:
               pendente.participantes,
-
             confrontos:
               criarConfrontos(
                 pendente.participantes
               ),
-
             fechada:
               false,
-
             resultado:
               null,
-
             criadaPor:
               interaction.user.id,
-
             criadaEm:
               new Date().toISOString()
           };
@@ -1996,6 +2300,24 @@ client.on(
               )
               .join("\n");
 
+          const embed =
+            embedBase(
+              `☀️ CHAVE BDR #${numero}`
+            ).setDescription(
+              `👥 **${tamanhoTexto(
+                chave.tamanho
+              )} MCs participantes**\n\n` +
+              `⚔️ **CONFRONTOS**\n\n` +
+              `${confrontosTexto}`
+            )
+              .addFields({
+                name:
+                  "📌 Status",
+                value:
+                  "🟢 **Em andamento**",
+                inline: true
+              });
+
           const row =
             new ActionRowBuilder()
               .addComponents(
@@ -2007,21 +2329,28 @@ client.on(
                   .setLabel(
                     "Encerrar chave"
                   )
+                  .setEmoji("🏆")
                   .setStyle(
                     ButtonStyle.Success
+                  ),
+
+                new ButtonBuilder()
+                  .setCustomId(
+                    `trocar_mc_${numero}`
+                  )
+                  .setLabel(
+                    "Trocar MC"
+                  )
+                  .setEmoji("🔄")
+                  .setStyle(
+                    ButtonStyle.Secondary
                   )
               );
 
           await interaction.update({
-            content:
-              `╭━━━━━━〔 ☀️ CHAVE BDR #${numero} 〕━━━━━━╮\n\n` +
-              `⚔️ **CONFRONTOS**\n\n` +
-              `${confrontosTexto}\n\n` +
-              `━━━━━━━━━━━━━━━━━━━━\n\n` +
-              `📊 **Participantes:** ${chave.tamanho} MCs\n` +
-              `📌 **Status:** 🟢 Em andamento\n\n` +
-              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
-
+            embeds: [
+              embed
+            ],
             components: [
               row
             ]
@@ -2030,9 +2359,9 @@ client.on(
           return;
         }
 
-        // =========================
+        // ==================================================
         // ENCERRAR CHAVE
-        // =========================
+        // ==================================================
 
         if (
           interaction.customId.startsWith(
@@ -2061,35 +2390,27 @@ client.on(
             );
 
           if (!chave) {
-
             return interaction.reply({
-              content:
-                "❌ Chave não encontrada.",
+              embeds: [
+                embedBase(
+                  "❌ CHAVE NÃO ENCONTRADA",
+                  COR_ERRO
+                )
+              ],
               ephemeral: true
             });
           }
 
           if (chave.fechada) {
-
             return interaction.reply({
-              content:
-                "❌ Essa chave já foi encerrada.",
-              ephemeral: true
-            });
-          }
-
-          // =====================================
-          // SOMENTE O ORGANIZADOR PODE ENCERRAR
-          // =====================================
-
-          if (
-            interaction.user.id !==
-            chave.criadaPor
-          ) {
-
-            return interaction.reply({
-              content:
-                "❌ Apenas o organizador que criou esta chave pode encerrá-la.",
+              embeds: [
+                embedBase(
+                  "❌ CHAVE JÁ ENCERRADA",
+                  COR_ERRO
+                ).setDescription(
+                  "Essa chave já foi encerrada."
+                )
+              ],
               ephemeral: true
             });
           }
@@ -2100,21 +2421,10 @@ client.on(
           const resultadoExistente = {
             campeao:
               null,
-
             vice:
               null,
-
-            passou1:
-              null,
-
-            passou2:
-              null,
-
-            chaveNumero:
-              numero,
-
-            dono:
-              interaction.user.id
+            classificados:
+              []
           };
 
           resultadosPendentes.set(
@@ -2122,20 +2432,21 @@ client.on(
             resultadoExistente
           );
 
-          // =====================================
-          // AGORA TAMBÉM É PÚBLICO
-          // =====================================
+          const embed =
+            embedBase(
+              `🏆 RESULTADO DA CHAVE #${numero}`
+            ).setDescription(
+              `Selecione os participantes do resultado abaixo.\n\n` +
+
+              `🥇 **Campeão — +5 pts**\n` +
+              `🥈 **Vice — +3 pts**\n` +
+              `✅ **Classificados — +1 pt cada**`
+            );
 
           await interaction.reply({
-            content:
-              `╭━━━━〔 🏆 RESULTADO DA CHAVE #${numero} 〕━━━━╮\n\n` +
-              `Selecione os participantes do resultado:\n\n` +
-              `🥇 **Campeão** — +5\n` +
-              `🥈 **Vice-campeão** — +3\n` +
-              `✅ **Classificado** — +1\n` +
-              `✅ **Classificado** — +1\n\n` +
-              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
-
+            embeds: [
+              embed
+            ],
             components:
               criarComponentesResultado(
                 numero,
@@ -2147,9 +2458,386 @@ client.on(
           return;
         }
 
-        // =========================
+        // ==================================================
+        // TROCAR MC
+        // ==================================================
+
+        if (
+          interaction.customId.startsWith(
+            "trocar_mc_"
+          )
+        ) {
+
+          const numero =
+            Number(
+              interaction.customId.replace(
+                "trocar_mc_",
+                ""
+              )
+            );
+
+          const dados =
+            garantirMesAtual();
+
+          const chave =
+            dados.chaves.find(
+              c =>
+                c.numero ===
+                  numero &&
+                c.mes ===
+                  dados.mesAtual
+            );
+
+          if (!chave) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ CHAVE NÃO ENCONTRADA",
+                  COR_ERRO
+                )
+              ],
+              ephemeral: true
+            });
+          }
+
+          if (chave.fechada) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ CHAVE ENCERRADA",
+                  COR_ERRO
+                ).setDescription(
+                  "Não é possível trocar MC depois do encerramento."
+                )
+              ],
+              ephemeral: true
+            });
+          }
+
+          const chaveDados =
+            `${interaction.user.id}_${numero}`;
+
+          const pendente = {
+            participantes:
+              [...chave.participantes],
+            antigo:
+              null,
+            novo:
+              null
+          };
+
+          trocasPendentes.set(
+            chaveDados,
+            pendente
+          );
+
+          const embed =
+            embedBase(
+              `🔄 TROCAR MC — CHAVE #${numero}`
+            ).setDescription(
+              `Use os dois seletores abaixo:\n\n` +
+              `👤 **1. MC ausente:** selecione quem não apareceu.\n` +
+              `🆕 **2. Novo MC:** selecione quem entrará no lugar.`
+            );
+
+          const confirmar =
+            new ButtonBuilder()
+              .setCustomId(
+                `confirmar_troca_${numero}`
+              )
+              .setLabel(
+                "Confirmar troca"
+              )
+              .setEmoji("🔄")
+              .setStyle(
+                ButtonStyle.Success
+              )
+              .setDisabled(true);
+
+          await interaction.reply({
+            embeds: [
+              embed
+            ],
+            components: [
+              new ActionRowBuilder()
+                .addComponents(
+                  criarSeletorTrocaAntigo(
+                    numero,
+                    chave.participantes,
+                    null
+                  )
+                ),
+              new ActionRowBuilder()
+                .addComponents(
+                  criarSeletorTrocaNovo(
+                    numero,
+                    chave.participantes,
+                    null
+                  )
+                ),
+              new ActionRowBuilder()
+                .addComponents(
+                  confirmar
+                )
+            ],
+            ephemeral: true
+          });
+
+          return;
+        }
+
+        // ==================================================
+        // CONFIRMAR TROCA
+        // ==================================================
+
+        if (
+          interaction.customId.startsWith(
+            "confirmar_troca_"
+          )
+        ) {
+
+          const numero =
+            Number(
+              interaction.customId.replace(
+                "confirmar_troca_",
+                ""
+              )
+            );
+
+          const chaveDados =
+            `${interaction.user.id}_${numero}`;
+
+          const pendente =
+            trocasPendentes.get(
+              chaveDados
+            );
+
+          if (!pendente) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ TROCA EXPIRADA",
+                  COR_ERRO
+                ).setDescription(
+                  "Abra novamente o botão **Trocar MC**."
+                )
+              ],
+              ephemeral: true
+            });
+          }
+
+          if (
+            !pendente.antigo ||
+            !pendente.novo
+          ) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ TROCA INCOMPLETA",
+                  COR_ERRO
+                ).setDescription(
+                  "Selecione o MC ausente e o novo MC."
+                )
+              ],
+              ephemeral: true
+            });
+          }
+
+          if (
+            pendente.antigo ===
+            pendente.novo
+          ) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ TROCA INVÁLIDA",
+                  COR_ERRO
+                ).setDescription(
+                  "O novo MC não pode ser o mesmo MC que está sendo substituído."
+                )
+              ],
+              ephemeral: true
+            });
+          }
+
+          if (
+            pendente.participantes.includes(
+              pendente.novo
+            )
+          ) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ MC JÁ PARTICIPA",
+                  COR_ERRO
+                ).setDescription(
+                  `<@${pendente.novo}> já está nesta chave.`
+                )
+              ],
+              ephemeral: true
+            });
+          }
+
+          const dados =
+            garantirMesAtual();
+
+          const chave =
+            dados.chaves.find(
+              c =>
+                c.numero ===
+                  numero &&
+                c.mes ===
+                  dados.mesAtual
+            );
+
+          if (!chave) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ CHAVE NÃO ENCONTRADA",
+                  COR_ERRO
+                )
+              ],
+              ephemeral: true
+            });
+          }
+
+          if (chave.fechada) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ CHAVE ENCERRADA",
+                  COR_ERRO
+                )
+              ],
+              ephemeral: true
+            });
+          }
+
+          const indice =
+            chave.participantes.indexOf(
+              pendente.antigo
+            );
+
+          if (indice === -1) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ MC NÃO ENCONTRADO",
+                  COR_ERRO
+                ).setDescription(
+                  "O MC selecionado não pertence mais a esta chave."
+                )
+              ],
+              ephemeral: true
+            });
+          }
+
+          chave.participantes[
+            indice
+          ] =
+            pendente.novo;
+
+          for (
+            const confronto of
+            chave.confrontos
+          ) {
+
+            if (
+              confronto.mc1 ===
+                pendente.antigo
+            ) {
+              confronto.mc1 =
+                pendente.novo;
+            }
+
+            if (
+              confronto.mc2 ===
+                pendente.antigo
+            ) {
+              confronto.mc2 =
+                pendente.novo;
+            }
+          }
+
+          salvarChaves(
+            dados
+          );
+
+          trocasPendentes.delete(
+            chaveDados
+          );
+
+          const confrontosTexto =
+            chave.confrontos
+              .map(
+                (
+                  confronto,
+                  index
+                ) =>
+                  `**${index + 1}.** <@${confronto.mc1}> × <@${confronto.mc2}>`
+              )
+              .join("\n");
+
+          const embed =
+            embedBase(
+              `☀️ CHAVE BDR #${numero}`
+            )
+              .setDescription(
+                `⚔️ **CONFRONTOS ATUALIZADOS**\n\n` +
+                confrontosTexto
+              )
+              .addFields({
+                name:
+                  "🔄 Troca realizada",
+                value:
+                  `<@${pendente.antigo}> → <@${pendente.novo}>`
+              });
+
+          const row =
+            new ActionRowBuilder()
+              .addComponents(
+
+                new ButtonBuilder()
+                  .setCustomId(
+                    `encerrar_chave_${numero}`
+                  )
+                  .setLabel(
+                    "Encerrar chave"
+                  )
+                  .setEmoji("🏆")
+                  .setStyle(
+                    ButtonStyle.Success
+                  ),
+
+                new ButtonBuilder()
+                  .setCustomId(
+                    `trocar_mc_${numero}`
+                  )
+                  .setLabel(
+                    "Trocar MC"
+                  )
+                  .setEmoji("🔄")
+                  .setStyle(
+                    ButtonStyle.Secondary
+                  )
+              );
+
+          await interaction.reply({
+            embeds: [
+              embed
+            ],
+            components: [
+              row
+            ]
+          });
+
+          return;
+        }
+
+        // ==================================================
         // CONFIRMAR RESULTADO
-        // =========================
+        // ==================================================
 
         if (
           interaction.customId.startsWith(
@@ -2168,77 +2856,21 @@ client.on(
           const chaveDados =
             `${interaction.user.id}_${numero}`;
 
-          let resultado =
+          const resultado =
             resultadosPendentes.get(
               chaveDados
             );
 
           if (!resultado) {
-
-            for (
-              const [
-                chavePendente,
-                valor
-              ] of resultadosPendentes
-            ) {
-
-              if (
-                valor &&
-                valor.chaveNumero ===
-                  numero &&
-                valor.dono ===
-                  interaction.user.id
-              ) {
-
-                resultado =
-                  valor;
-
-                resultadosPendentes.delete(
-                  chavePendente
-                );
-
-                break;
-              }
-            }
-          }
-
-          if (!resultado) {
-
             return interaction.reply({
-              content:
-                "❌ Resultado não encontrado. Abra novamente a chave.",
-              ephemeral: true
-            });
-          }
-
-          const ids = [
-            resultado.campeao,
-            resultado.vice,
-            resultado.passou1,
-            resultado.passou2
-          ];
-
-          if (
-            ids.some(
-              id => !id
-            )
-          ) {
-
-            return interaction.reply({
-              content:
-                "❌ Selecione todos os quatro resultados.",
-              ephemeral: true
-            });
-          }
-
-          if (
-            new Set(ids).size !==
-            ids.length
-          ) {
-
-            return interaction.reply({
-              content:
-                "❌ Um mesmo MC não pode ocupar duas posições.",
+              embeds: [
+                embedBase(
+                  "❌ RESULTADO NÃO ENCONTRADO",
+                  COR_ERRO
+                ).setDescription(
+                  "Abra novamente a chave."
+                )
+              ],
               ephemeral: true
             });
           }
@@ -2256,26 +2888,100 @@ client.on(
             );
 
           if (!chave) {
-
             return interaction.reply({
-              content:
-                "❌ Chave não encontrada.",
+              embeds: [
+                embedBase(
+                  "❌ CHAVE NÃO ENCONTRADA",
+                  COR_ERRO
+                )
+              ],
               ephemeral: true
             });
           }
 
           if (chave.fechada) {
-
             return interaction.reply({
-              content:
-                "❌ Essa chave já foi encerrada.",
+              embeds: [
+                embedBase(
+                  "❌ CHAVE JÁ ENCERRADA",
+                  COR_ERRO
+                )
+              ],
               ephemeral: true
             });
           }
 
-          // =====================================
-          // VERIFICAR TODOS OS PARTICIPANTES
-          // =====================================
+          const quantidadeClassificados =
+            chave.tamanho === 8
+              ? 4
+              : 2;
+
+          const classificados =
+            Array.isArray(
+              resultado.classificados
+            )
+              ? resultado.classificados
+              : [];
+
+          if (
+            classificados.length !==
+            quantidadeClassificados ||
+            classificados.some(
+              id => !id
+            )
+          ) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ RESULTADO INCOMPLETO",
+                  COR_ERRO
+                ).setDescription(
+                  `Selecione os **${quantidadeClassificados} classificados** desta chave.`
+                )
+              ],
+              ephemeral: true
+            });
+          }
+
+          if (
+            !resultado.campeao ||
+            !resultado.vice
+          ) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ RESULTADO INCOMPLETO",
+                  COR_ERRO
+                ).setDescription(
+                  "Selecione campeão e vice."
+                )
+              ],
+              ephemeral: true
+            });
+          }
+
+          const ids = [
+            resultado.campeao,
+            resultado.vice,
+            ...classificados
+          ];
+
+          if (
+            new Set(ids).size !==
+            ids.length
+          ) {
+            return interaction.reply({
+              embeds: [
+                embedBase(
+                  "❌ RESULTADO INVÁLIDO",
+                  COR_ERRO
+                ).setDescription(
+                  "Um mesmo MC não pode ocupar duas posições."
+                )
+              ],
+              ephemeral: true
+            });
+          }
 
           for (
             const id of ids
@@ -2286,28 +2992,29 @@ client.on(
                 id
               )
             ) {
-
               return interaction.reply({
-                content:
-                  `❌ <@${id}> não participou desta chave.`,
+                embeds: [
+                  embedBase(
+                    "❌ MC INVÁLIDO",
+                    COR_ERRO
+                  ).setDescription(
+                    `<@${id}> não participou desta chave.`
+                  )
+                ],
                 ephemeral: true
               });
             }
           }
 
           chave.resultado = {
-
             campeao:
               resultado.campeao,
 
             vice:
               resultado.vice,
 
-            passou1:
-              resultado.passou1,
-
-            passou2:
-              resultado.passou2
+            classificados:
+              [...classificados]
           };
 
           chave.fechada =
@@ -2328,34 +3035,56 @@ client.on(
             chaveDados
           );
 
-          // =====================================
-          // RESULTADO PÚBLICO
-          // =====================================
+          const classificacaoTexto =
+            classificados
+              .map(
+                id =>
+                  `✅ <@${id}> — **+1 pt**`
+              )
+              .join("\n");
+
+          const embed =
+            embedBase(
+              `🏆 RESULTADO OFICIAL — CHAVE #${numero}`
+            )
+              .setDescription(
+                `🥇 **Campeão:** <@${resultado.campeao}> — **+5 pts**\n\n` +
+                `🥈 **Vice:** <@${resultado.vice}> — **+3 pts**\n\n` +
+                `✅ **Classificados:**\n${classificacaoTexto}`
+              )
+              .addFields({
+                name:
+                  "📊 Pontuação registrada",
+                value:
+                  `🥇 Campeão: **+5**\n` +
+                  `🥈 Vice: **+3**\n` +
+                  `✅ Cada classificado: **+1**`
+              });
+
+          if (
+            chave.criadaPor
+          ) {
+            embed.addFields({
+              name:
+                "👑 Organização",
+              value:
+                `<@${chave.criadaPor}> recebeu **+2 pontos de organização**.`
+            });
+          }
 
           await interaction.update({
-
-            content:
-              `╭━━━━〔 🏆 RESULTADO OFICIAL 〕━━━━╮\n\n` +
-              `☀️ **CHAVE #${numero}**\n\n` +
-              `🥇 <@${ids[0]}> — **+5 pts**\n` +
-              `🥈 <@${ids[1]}> — **+3 pts**\n\n` +
-              `✅ <@${ids[2]}> — **+1 pt**\n` +
-              `✅ <@${ids[3]}> — **+1 pt**\n\n` +
-              `━━━━━━━━━━━━━━━━━━━━\n\n` +
-              `📊 **${chave.participantes.length} MCs participaram desta ranqueada.**\n\n` +
-              `👑 **Organizador:** <@${chave.encerradaPor}>\n` +
-              `⭐ **+2 pontos de organização**\n\n` +
-              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯`,
-
+            embeds: [
+              embed
+            ],
             components: []
           });
 
           return;
         }
 
-        // =========================
+        // ==================================================
         // CONFIRMAR LIMPEZA
-        // =========================
+        // ==================================================
 
         if (
           interaction.customId ===
@@ -2369,7 +3098,6 @@ client.on(
             dados.mesAtual;
 
           if (mesAnterior) {
-
             dados.historicoMeses.push({
               mes:
                 mesAnterior,
@@ -2377,8 +3105,8 @@ client.on(
               ranking:
                 dados.ranking,
 
-              organizadores:
-                dados.organizadores,
+              organizacao:
+                dados.organizacao,
 
               encerradoEm:
                 new Date().toISOString()
@@ -2386,8 +3114,7 @@ client.on(
           }
 
           dados.ranking = {};
-
-          dados.organizadores = {};
+          dados.organizacao = {};
 
           dados.mesAtual =
             mesAtual();
@@ -2397,20 +3124,25 @@ client.on(
           );
 
           await interaction.update({
-
-            content:
-              `✅ **Ranking encerrado!**\n\n` +
-              `🏆 O ranking de **${nomeMes(dados.mesAtual)}** começou agora.`,
-
+            embeds: [
+              embedBase(
+                "✅ RANKING ENCERRADO",
+                COR_SUCESSO
+              ).setDescription(
+                `🏆 O ranking de **${nomeMes(
+                  dados.mesAtual
+                )}** começou agora.`
+              )
+            ],
             components: []
           });
 
           return;
         }
 
-        // =========================
+        // ==================================================
         // CANCELAR LIMPEZA
-        // =========================
+        // ==================================================
 
         if (
           interaction.customId ===
@@ -2418,10 +3150,14 @@ client.on(
         ) {
 
           await interaction.update({
-
-            content:
-              "❌ Limpeza cancelada.",
-
+            embeds: [
+              embedBase(
+                "❌ LIMPEZA CANCELADA",
+                COR_ERRO
+              ).setDescription(
+                "O ranking atual continua ativo."
+              )
+            ],
             components: []
           });
 
@@ -2443,8 +3179,14 @@ client.on(
 
         await interaction
           .reply({
-            content:
-              "❌ Ocorreu um erro ao executar essa ação.",
+            embeds: [
+              embedBase(
+                "❌ ERRO",
+                COR_ERRO
+              ).setDescription(
+                "Ocorreu um erro ao executar essa ação."
+              )
+            ],
             ephemeral: true
           })
           .catch(() => {});
@@ -2453,9 +3195,53 @@ client.on(
   }
 );
 
-// =========================
+// ======================================================
+// FUNÇÕES DOS SELETORES DE TROCA
+// ======================================================
+
+function criarSeletorTrocaAntigo(
+  numero,
+  participantes,
+  selecionado
+) {
+
+  return new UserSelectMenuBuilder()
+    .setCustomId(
+      `trocar_mc_selecionar_${numero}_antigo`
+    )
+    .setPlaceholder(
+      "👤 Selecionar MC ausente"
+    )
+    .setMinValues(1)
+    .setMaxValues(1);
+}
+
+function criarSeletorTrocaNovo(
+  numero,
+  participantes,
+  selecionado
+) {
+
+  return new UserSelectMenuBuilder()
+    .setCustomId(
+      `trocar_mc_selecionar_${numero}_novo`
+    )
+    .setPlaceholder(
+      "🆕 Selecionar novo MC"
+    )
+    .setMinValues(1)
+    .setMaxValues(1);
+}
+
+function tamanhoTexto(tamanho) {
+  return tamanho === 8
+    ? "8"
+    : "4";
+}
+
+// ======================================================
 // LOGIN
-// =========================
+// ======================================================
 
 if (!TOKEN) {
 
