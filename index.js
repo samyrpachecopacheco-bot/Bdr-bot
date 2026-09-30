@@ -1944,13 +1944,8 @@ resultadosPendentes.set(
   chaveDados,
   resultado
 );
-          resultadosPendentes.set(
-            chaveDados,
-            resultado
-          );
 
-          const dados =
-            garantirMesAtual();
+const dados = garantirMesAtual();
 
           const chave =
             dados.chaves.find(
