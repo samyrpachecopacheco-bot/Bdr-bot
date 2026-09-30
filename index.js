@@ -744,10 +744,7 @@ function criarComponentesResultado(
 ) {
   const componentes = [];
 
-  // ================================================
   // CAMPEÃO
-  // ================================================
-
   componentes.push(
     criarMenuResultado(
       numero,
@@ -758,10 +755,7 @@ function criarComponentesResultado(
     )
   );
 
-  // ================================================
   // VICE
-  // ================================================
-
   componentes.push(
     criarMenuResultado(
       numero,
@@ -772,18 +766,13 @@ function criarComponentesResultado(
     )
   );
 
-  // ================================================
   // CLASSIFICADOS
-  // ================================================
-
   const quantidadeClassificados =
-    participantes.length === 8
-      ? 4
-      : 2;
+    participantes.length === 8 ? 4 : 2;
 
   const classificados =
     Array.isArray(resultado.classificados)
-      ? resultado.classificados
+      ? resultado.classificados.filter(Boolean)
       : [];
 
   const menuClassificados =
@@ -792,7 +781,7 @@ function criarComponentesResultado(
         `resultado_select_${numero}_classificados`
       )
       .setPlaceholder(
-        `✅ Selecionar ${quantidadeClassificados} classificados`
+        `✅ Selecione ${quantidadeClassificados} classificados`
       )
       .setMinValues(
         quantidadeClassificados
@@ -801,30 +790,23 @@ function criarComponentesResultado(
         quantidadeClassificados
       )
       .addOptions(
-        participantes.map(
-          (id, index) => ({
-            label:
-              `MC ${index + 1}`,
-            description:
-              `Selecionar <@${id}>`,
-            value:
-              id,
-            default:
-              classificados.includes(id)
-          })
-        )
+        participantes.map((id, index) => ({
+          label: `MC ${index + 1}`,
+          description: `Selecionar <@${id}>`,
+          value: id,
+          default: classificados.includes(id)
+        }))
       );
 
   componentes.push(
-    new ActionRowBuilder()
-      .addComponents(
-        menuClassificados
-      )
+    new ActionRowBuilder().addComponents(
+      menuClassificados
+    )
   );
 
-  // ================================================
   // CONFIRMAR
-  // ================================================
+  const quantidadeNecessaria =
+    2 + quantidadeClassificados;
 
   const ids = [
     resultado.campeao,
@@ -833,33 +815,24 @@ function criarComponentesResultado(
   ];
 
   const preenchido =
-    ids.length ===
-      2 + quantidadeClassificados &&
+    ids.length === quantidadeNecessaria &&
     ids.every(Boolean);
 
   componentes.push(
-    new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(
-            `confirmar_resultado_${numero}`
-          )
-          .setLabel(
-            "Confirmar resultado"
-          )
-          .setEmoji("🏆")
-          .setStyle(
-            ButtonStyle.Success
-          )
-          .setDisabled(
-            !preenchido
-          )
-      )
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(
+          `confirmar_resultado_${numero}`
+        )
+        .setLabel("Confirmar resultado")
+        .setEmoji("🏆")
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(!preenchido)
+    )
   );
 
   return componentes;
 }
-
 // ======================================================
 // TEXTO PARTICIPANTES
 // ======================================================
@@ -1962,38 +1935,19 @@ client.on(
           }
 
           if (
-            campo.startsWith(
-              "classificado"
-            )
-          ) {
+  campo === "classificados"
+) {
+  resultado.classificados =
+    [...interaction.values];
+} else {
+  resultado[campo] =
+    interaction.values[0];
+}
 
-            const indice =
-              Number(
-                campo.replace(
-                  "classificado",
-                  ""
-                )
-              );
-
-            if (
-              !Array.isArray(
-                resultado.classificados
-              )
-            ) {
-              resultado.classificados =
-                [];
-            }
-
-            resultado.classificados[
-              indice
-            ] =
-              interaction.values[0];
-
-          } else {
-
-            resultado[campo] =
-              interaction.values[0];
-          }
+resultadosPendentes.set(
+  chaveDados,
+  resultado
+);
 
           resultadosPendentes.set(
             chaveDados,
