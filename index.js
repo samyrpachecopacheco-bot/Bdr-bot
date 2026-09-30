@@ -57,7 +57,7 @@ return new EmbedBuilder()
 function  embedAdv ( título , campos , cor = COR_BDR )  {
   const  embed = embedBase ( título , cor ) ;
 
-  para  ( const  campo  de  campos )  {
+  for (const campo of campos) {
     incorporar . adicionarCampos ( {
       nome : campo.nome ,​​
       valor : campo . valor ,
