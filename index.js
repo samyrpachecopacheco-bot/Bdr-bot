@@ -41,70 +41,70 @@ const COR_INFO = 0x5865f2;
 const COR_AVISO = 0xffcc00;
 
 // ======================================================
-// EMBEDS
+// INCORPORAÇÕES
 // ======================================================
 
-function embedBase(titulo, cor = COR_BDR) {
-  return new EmbedBuilder()
-    .setColor(cor)
-    .setTitle(titulo)
-    .setFooter({
-      text: "☀️ Batalha do Repente"
-    })
-    .setTimestamp();
+função  embedBase ( título , cor = COR_BDR )  {
+  retornar  novo  EmbedBuilder ( )
+    . definirCor ( cor )
+    . definirTítulo ( título )
+    . setFooter ( {
+      texto : "☀️ Batalha do Repente"
+    } )
+    . setTimestamp ( ) ;
 }
 
-function embedAdv(titulo, campos, cor = COR_BDR) {
-  const embed = embedBase(titulo, cor);
+function  embedAdv ( título , campos , cor = COR_BDR )  {
+  const  embed = embedBase ( título , cor ) ;
 
-  for (const campo of campos) {
-    embed.addFields({
-      name: campo.nome,
-      value: campo.valor,
-      inline: campo.inline ?? false
-    });
+  para  ( const  campo  de  campos )  {
+    incorporar . adicionarCampos ( {
+      nome : campo.nome ,​​
+      valor : campo . valor ,
+      inline : campo.inline ?? false​​
+    } ) ;
   }
 
-  return embed;
+  retornar  incorporado ;
 }
 
 // ======================================================
 // ARQUIVOS
 // ======================================================
 
-function carregarArquivo(arquivo, padrao) {
-  try {
-    if (!fs.existsSync(arquivo)) {
-      fs.writeFileSync(
-        arquivo,
-        JSON.stringify(padrao, null, 2)
-      );
+function  carregarArquivo ( arquivo , padrão )  {
+  tentar  {
+    if  ( ! fs . existsSync ( arquivo ) )  {
+      fs.writeFileSync (​​
+        arquivo ,
+        JSON.stringify ( padrao , null , 2 )​​
+      ) ;
 
-      return padrao;
+      retornar  padrao ;
     }
 
-    const conteudo = fs.readFileSync(
-      arquivo,
+    const  conteudo = fs . readFileSync (
+      arquivo ,
       "utf8"
-    );
+    ) ;
 
-    if (!conteudo.trim()) {
-      fs.writeFileSync(
-        arquivo,
-        JSON.stringify(padrao, null, 2)
-      );
+    if  ( ! conteudo . trim ( ) )  {
+      fs.writeFileSync (​​
+        arquivo ,
+        JSON.stringify ( padrao , null , 2 )​​
+      ) ;
 
-      return padrao;
+      retornar  padrao ;
     }
 
-    return JSON.parse(conteudo);
-  } catch (erro) {
-    console.error(
-      `Erro ao carregar ${arquivo}:`,
+    retornar  JSON . analisar ( conteudo ) ;
+  }  catch  ( erro )  {
+    console.erro (​​
+      `Erro ao carregar ${ arquivo } :` ,
       erro
-    );
+    ) ;
 
-    return padrao;
+    retornar  padrao ;
   }
 }
 
@@ -1934,14 +1934,10 @@ client.on(
             };
           }
 
-          if (
-  campo === "classificados"
-) {
-  resultado.classificados =
-    [...interaction.values];
+          if (campo === "classificados") {
+  resultado.classificados = [...interaction.values];
 } else {
-  resultado[campo] =
-    interaction.values[0];
+  resultado[campo] = interaction.values[0];
 }
 
 resultadosPendentes.set(
