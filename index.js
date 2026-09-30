@@ -1944,7 +1944,6 @@ resultadosPendentes.set(
   chaveDados,
   resultado
 );
-
           resultadosPendentes.set(
             chaveDados,
             resultado
