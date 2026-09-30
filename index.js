@@ -45,7 +45,7 @@ const COR_AVISO = 0xffcc00;
 // ======================================================
 
 function embedBase(titulo, cor = COR_BDR) {
-  retornar  novo  EmbedBuilder ( )
+return new EmbedBuilder()
     . definirCor ( cor )
     . definirTítulo ( título )
     . setFooter ( {
