@@ -744,9 +744,9 @@ function criarComponentesResultado(
 ) {
   const componentes = [];
 
-  // ==================================================
+  // ================================================
   // CAMPEÃO
-  // ==================================================
+  // ================================================
 
   componentes.push(
     criarMenuResultado(
@@ -758,9 +758,9 @@ function criarComponentesResultado(
     )
   );
 
-  // ==================================================
+  // ================================================
   // VICE
-  // ==================================================
+  // ================================================
 
   componentes.push(
     criarMenuResultado(
@@ -772,9 +772,9 @@ function criarComponentesResultado(
     )
   );
 
-  // ==================================================
+  // ================================================
   // CLASSIFICADOS
-  // ==================================================
+  // ================================================
 
   const quantidadeClassificados =
     participantes.length === 8
@@ -782,41 +782,55 @@ function criarComponentesResultado(
       : 2;
 
   const classificados =
-    Array.isArray(
-      resultado.classificados
-    )
+    Array.isArray(resultado.classificados)
       ? resultado.classificados
-      : [
-          resultado.passou1,
-          resultado.passou2
-        ].filter(Boolean);
+      : [];
 
-  for (
-    let i = 0;
-    i < quantidadeClassificados;
-    i++
-  ) {
-    componentes.push(
-      criarMenuResultado(
-        numero,
-        `classificado${i}`,
-        `✅ Classificado ${i + 1}`,
-        classificados[i] || null,
-        participantes
+  const menuClassificados =
+    new StringSelectMenuBuilder()
+      .setCustomId(
+        `resultado_select_${numero}_classificados`
       )
-    );
-  }
+      .setPlaceholder(
+        `✅ Selecionar ${quantidadeClassificados} classificados`
+      )
+      .setMinValues(
+        quantidadeClassificados
+      )
+      .setMaxValues(
+        quantidadeClassificados
+      )
+      .addOptions(
+        participantes.map(
+          (id, index) => ({
+            label:
+              `MC ${index + 1}`,
+            description:
+              `Selecionar <@${id}>`,
+            value:
+              id,
+            default:
+              classificados.includes(id)
+          })
+        )
+      );
 
-  // ==================================================
+  componentes.push(
+    new ActionRowBuilder()
+      .addComponents(
+        menuClassificados
+      )
+  );
+
+  // ================================================
   // CONFIRMAR
-  // ==================================================
+  // ================================================
 
-  const ids =
-    [
-      resultado.campeao,
-      resultado.vice,
-      ...classificados
-    ];
+  const ids = [
+    resultado.campeao,
+    resultado.vice,
+    ...classificados
+  ];
 
   const preenchido =
     ids.length ===
