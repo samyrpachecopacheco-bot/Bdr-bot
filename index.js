@@ -44,7 +44,7 @@ const COR_AVISO = 0xffcc00;
 // INCORPORAÇÕES
 // ======================================================
 
-função  embedBase ( título , cor = COR_BDR )  {
+function embedBase(titulo, cor = COR_BDR) {
   retornar  novo  EmbedBuilder ( )
     . definirCor ( cor )
     . definirTítulo ( título )
